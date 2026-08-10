@@ -8,6 +8,10 @@ import { usePracticeStore, type PracticeRecord } from '@/store/practiceStore'
 
 const mocks = vi.hoisted(() => ({
   pushMock: vi.fn(),
+  replaceMock: vi.fn(),
+  route: {
+    query: {} as Record<string, unknown>
+  },
   messageSuccessMock: vi.fn()
 }))
 
@@ -15,8 +19,10 @@ const pushMock = mocks.pushMock
 const messageSuccessMock = mocks.messageSuccessMock
 
 vi.mock('vue-router', () => ({
+  useRoute: () => mocks.route,
   useRouter: () => ({
-    push: mocks.pushMock
+    push: mocks.pushMock,
+    replace: mocks.replaceMock
   })
 }))
 
@@ -60,6 +66,8 @@ describe('practice review entry points', () => {
     setActivePinia(createPinia())
     backingStore = {}
     pushMock.mockReset()
+    mocks.replaceMock.mockReset()
+    mocks.route.query = {}
     messageSuccessMock.mockReset()
 
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key) => backingStore[key] ?? null)
@@ -99,7 +107,10 @@ describe('practice review entry points', () => {
       query: {
         id: 'p1-high-05',
         mode: 'review',
-        recordId: 'record-1'
+        recordId: 'record-1',
+        from: 'practice',
+        page: '1',
+        pageSize: '10'
       }
     })
   })

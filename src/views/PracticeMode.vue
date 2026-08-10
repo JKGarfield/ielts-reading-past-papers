@@ -345,6 +345,7 @@ import { usePracticeStore, type PracticeRecord, type PracticeRecordInput } from 
 import { useQuestionStore } from '@/store/questionStore'
 import { ACHIEVEMENT_UNLOCKED, eventBus, PRACTICE_UPDATED } from '@/utils/eventBus'
 import { createSelectionHighlightRecord, findMatchingHighlightRecord } from '@/utils/practiceHighlights'
+import { getPracticeHistoryReturnQuery } from '@/utils/practiceReview'
 import { formatAnswerDisplay } from '@/utils/readingPractice'
 import type { AttemptContext, RecentPracticeItem } from '@/types/assistant'
 import type { HighlightScope, PracticeFontScale, PracticeHighlightRecord, PracticeRouteMode, ReadingAstNode } from '@/types/readingNative'
@@ -687,7 +688,14 @@ function openPdf() {
 
 function goBack() {
   if (routeMode.value === 'review') {
-    router.push({ path: '/practice' })
+    if (route.query.from === 'practice') {
+      router.push({
+        path: '/practice',
+        query: getPracticeHistoryReturnQuery(route.query as Record<string, unknown>)
+      })
+    } else {
+      router.push({ path: '/practice' })
+    }
     return
   }
   const query: Record<string, string> = {}

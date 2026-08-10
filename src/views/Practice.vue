@@ -56,15 +56,88 @@
             <button class="action-button danger" @click="clear">
               <span class="material-icons" style="font-size: 18px;">delete</span> {{ t('practice.clearRecords') }}
             </button>
-            <div class="page-size-selector">
-              <span class="page-size-label">{{ t('browse.itemsPerPage') }}:</span>
-              <select v-model="pageSize" class="filter-select small">
-                <option :value="10">10</option>
-                <option :value="20">20</option>
-                <option :value="50">50</option>
-                <option :value="100">100</option>
-              </select>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="store.records.length > 0"
+        class="history-filter-panel"
+        data-testid="practice-history-filter-panel"
+      >
+        <div class="history-filter-group">
+          <div class="history-filter-item">
+            <label class="history-filter-label" for="practice-history-category">
+              {{ t('browse.category') }}:
+            </label>
+            <select
+              id="practice-history-category"
+              v-model="category"
+              class="filter-select"
+              data-testid="practice-history-category"
+            >
+              <option value="all">{{ t('browse.allCategories') }}</option>
+              <option value="P1">P1</option>
+              <option value="P2">P2</option>
+              <option value="P3">P3</option>
+            </select>
+          </div>
+
+          <div class="history-filter-item history-search-item">
+            <label class="history-filter-label" for="practice-history-search">
+              {{ t('practice.searchLabel') }}:
+            </label>
+            <div class="history-search-wrap" :class="{ 'has-value': searchText.length > 0 }">
+              <input
+                id="practice-history-search"
+                v-model="searchText"
+                type="search"
+                class="history-search-field"
+                data-testid="practice-history-search"
+                :placeholder="t('practice.searchPlaceholder')"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button
+                v-show="searchText.length > 0"
+                type="button"
+                class="history-search-clear"
+                data-testid="practice-history-search-clear"
+                :title="t('practice.clearSearch')"
+                :aria-label="t('practice.clearSearch')"
+                @click="searchText = ''"
+              >
+                <span class="material-icons" aria-hidden="true">close</span>
+              </button>
             </div>
+          </div>
+        </div>
+
+        <div class="history-filter-footer">
+          <div class="history-result-info">
+            <span data-testid="practice-history-result-count">
+              {{ t('practice.matchingRecords', { count: filteredRecords.length, total: store.records.length }) }}
+            </span>
+            <span v-if="filteredRecords.length > 0" class="history-page-info">
+              {{ t('practice.pageInfo', { current: currentPage, total: totalPages }) }}
+            </span>
+          </div>
+
+          <div class="page-size-selector">
+            <label class="page-size-label" for="practice-history-page-size">
+              {{ t('browse.itemsPerPage') }}:
+            </label>
+            <select
+              id="practice-history-page-size"
+              v-model="pageSize"
+              class="filter-select small"
+              data-testid="practice-history-page-size"
+            >
+              <option :value="10">10</option>
+              <option :value="20">20</option>
+              <option :value="50">50</option>
+              <option :value="100">100</option>
+            </select>
           </div>
         </div>
       </div>
@@ -74,6 +147,25 @@
         <div class="empty-text">{{ t('practice.noRecords') }}</div>
         <button class="start-button" @click="$router.push('/browse')">
           {{ t('practice.startPractice') }} <span class="material-icons" style="font-size: 16px;">arrow_forward</span>
+        </button>
+      </div>
+
+      <div
+        v-else-if="filteredRecords.length === 0"
+        class="empty-state filter-empty-state"
+        data-testid="practice-history-filter-empty"
+      >
+        <span class="material-icons empty-icon">search_off</span>
+        <div class="empty-text">{{ t('practice.noMatchingRecords') }}</div>
+        <div class="empty-hint">{{ t('practice.noMatchingHint') }}</div>
+        <button
+          type="button"
+          class="start-button reset-filter-button"
+          data-testid="practice-history-reset"
+          @click="resetFilters"
+        >
+          {{ t('practice.resetFilters') }}
+          <span class="material-icons" style="font-size: 16px;">restart_alt</span>
         </button>
       </div>
 
@@ -129,7 +221,7 @@
         </div>
       </div>
 
-      <div v-if="totalPages > 1" class="pagination-section">
+      <div v-if="filteredRecords.length > 0 && totalPages > 1" class="pagination-section">
         <button class="pagination-button" :disabled="currentPage === 1" @click="currentPage -= 1">
           <span class="material-icons pagination-icon">arrow_back</span> {{ t('browse.prev') }}
         </button>
@@ -156,50 +248,104 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, inject, ref, watch, type Readonly, type Ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, onUnmounted, inject, nextTick, ref, watch, type Readonly, type Ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { usePracticeStore, type PracticeRecord } from '@/store/practiceStore'
 import { useAchievementStore } from '@/store/achievementStore'
+import { useQuestionStore } from '@/store/questionStore'
 import { message } from 'ant-design-vue'
 import { eventBus, PRACTICE_UPDATED } from '@/utils/eventBus'
 import { exportBackup, importBackup } from '@/utils/backup'
-import { buildPracticeReviewRoute, canReviewPracticeRecord } from '@/utils/practiceReview'
+import {
+  buildPracticeHistoryQuery,
+  buildPracticeReviewRoute,
+  canReviewPracticeRecord,
+  parsePracticeHistoryQuery,
+  type PracticeHistoryCategory
+} from '@/utils/practiceReview'
 import { markLocalDataImported } from '@/sync/syncManager'
 
+type TranslationParams = Record<string, string | number>
+
+const route = useRoute()
 const router = useRouter()
 const store = usePracticeStore()
 const achievementStore = useAchievementStore()
-const t = inject('t', (key: string) => key)
+const questionStore = useQuestionStore()
+const t = inject<(key: string, params?: TranslationParams) => string>('t', (key: string) => key)
 const currentLang = inject<Readonly<Ref<'zh' | 'en'>>>('currentLang', ref('zh') as Readonly<Ref<'zh' | 'en'>>)
 const fileInput = ref<HTMLInputElement | null>(null)
 
-// 分页状态
+// 筛选与分页状态
+const searchText = ref('')
+const category = ref<PracticeHistoryCategory>('all')
 const currentPage = ref(1)
 const pageSize = ref(10)
+const isRestoringRoute = ref(true)
 
-// 当记录变化时重置到第一页
-watch(() => store.records.length, () => {
-  currentPage.value = 1
-})
+const questionLookup = computed(() => new Map(
+  questionStore.questions.map((question) => [question.id, question])
+))
 
-// 当每页显示数量变化时，检查并重置当前页码到有效范围
-watch(() => pageSize.value, () => {
-  const maxPage = Math.ceil(store.records.length / pageSize.value) || 1
-  if (currentPage.value > maxPage) {
-    currentPage.value = maxPage
+function normalizedRecordCategory(record: PracticeRecord): Exclude<PracticeHistoryCategory, 'all'> | null {
+  const directCategory = String(record.category || '').trim().toUpperCase()
+  if (directCategory === 'P1' || directCategory === 'P2' || directCategory === 'P3') {
+    return directCategory
   }
+
+  const questionCategory = String(questionLookup.value.get(record.questionId)?.category || '').trim().toUpperCase()
+  if (questionCategory === 'P1' || questionCategory === 'P2' || questionCategory === 'P3') {
+    return questionCategory
+  }
+
+  const idMatch = String(record.questionId || '').trim().match(/^p([123])(?:-|$)/i)
+  return idMatch ? `P${idMatch[1]}` as Exclude<PracticeHistoryCategory, 'all'> : null
+}
+
+const filteredRecords = computed(() => {
+  const keyword = searchText.value.trim().toLocaleLowerCase()
+
+  return store.records.filter((record) => {
+    if (category.value !== 'all' && normalizedRecordCategory(record) !== category.value) {
+      return false
+    }
+
+    if (!keyword) {
+      return true
+    }
+
+    const question = questionLookup.value.get(record.questionId)
+    const searchableText = [
+      record.questionId,
+      record.questionTitle,
+      question?.title,
+      question?.titleCN
+    ]
+      .filter((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+      .join(' ')
+      .toLocaleLowerCase()
+
+    return searchableText.includes(keyword)
+  })
 })
+
+const currentHistoryQuery = computed(() => buildPracticeHistoryQuery({
+  search: searchText.value,
+  category: category.value,
+  page: currentPage.value,
+  pageSize: pageSize.value
+}))
 
 // 计算总分页数量
 const totalPages = computed(() => {
-  return Math.ceil(store.records.length / pageSize.value) || 1
+  return Math.max(1, Math.ceil(filteredRecords.value.length / pageSize.value))
 })
 
 // 获取当前页的记录
 const paginatedRecords = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   const end = start + pageSize.value
-  return store.records.slice(start, end)
+  return filteredRecords.value.slice(start, end)
 })
 
 // 计算要显示的页码（智能分页）
@@ -234,16 +380,43 @@ const displayPages = computed(() => {
   return [1, -1, current - 1, current, current + 1, -1, total]
 })
 
+function syncHistoryRoute() {
+  void router.replace({
+    path: '/practice',
+    query: currentHistoryQuery.value
+  })
+}
+
+function resetFilters() {
+  searchText.value = ''
+  category.value = 'all'
+  currentPage.value = 1
+}
+
 // 处理数据更新
-const handlePracticeUpdated = (event: CustomEvent) => {
-  // 重新加载数据
+const handlePracticeUpdated = () => {
+  // 重新加载数据；筛选状态保留，分页 watcher 负责收敛到有效页
   store.load()
   achievementStore.load()
 }
 
-onMounted(() => {
+onMounted(async () => {
   store.load()
   achievementStore.load()
+  questionStore.loadQuestions()
+
+  const restored = parsePracticeHistoryQuery(route.query as Record<string, unknown>)
+  searchText.value = restored.search
+  category.value = restored.category
+  currentPage.value = restored.page
+  pageSize.value = restored.pageSize
+
+  await nextTick()
+  isRestoringRoute.value = false
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value
+  }
+  syncHistoryRoute()
   
   // 监听数据更新事件
   eventBus.on(PRACTICE_UPDATED, handlePracticeUpdated)
@@ -252,6 +425,24 @@ onMounted(() => {
 onUnmounted(() => {
   eventBus.off(PRACTICE_UPDATED, handlePracticeUpdated)
 })
+
+watch([searchText, category, pageSize], () => {
+  if (!isRestoringRoute.value) {
+    currentPage.value = 1
+  }
+})
+
+watch(totalPages, (value) => {
+  if (currentPage.value > value) {
+    currentPage.value = value
+  }
+})
+
+watch([searchText, category, currentPage, pageSize], () => {
+  if (!isRestoringRoute.value) {
+    syncHistoryRoute()
+  }
+}, { flush: 'post' })
 
 const total = computed(() => store.totalCount)
 const avg = computed(() => store.avgAccuracy)
@@ -298,7 +489,7 @@ const openReview = (record: PracticeRecord) => {
   if (!canReviewPracticeRecord(record)) {
     return
   }
-  router.push(buildPracticeReviewRoute(record))
+  router.push(buildPracticeReviewRoute(record, currentHistoryQuery.value))
 }
 
 const exportData = () => {
@@ -501,6 +692,136 @@ const handleImport = async (event: Event) => {
   background: var(--danger-soft);
 }
 
+.history-filter-panel {
+  padding: 20px;
+  margin-bottom: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+}
+
+.history-filter-group,
+.history-filter-footer,
+.history-result-info,
+.history-filter-item,
+.page-size-selector {
+  display: flex;
+  align-items: center;
+}
+
+.history-filter-group {
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.history-filter-item {
+  gap: 8px;
+}
+
+.history-search-item {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.history-filter-label,
+.page-size-label {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.history-search-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.history-search-field {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  appearance: none;
+  transition: var(--transition);
+}
+
+.history-search-field::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.history-search-field:hover {
+  border-color: var(--primary-color);
+}
+
+.history-search-field:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-ring);
+}
+
+.history-search-wrap.has-value .history-search-field {
+  padding-right: 40px;
+}
+
+.history-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  transition: var(--transition);
+}
+
+.history-search-clear:hover,
+.history-search-clear:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.history-search-clear .material-icons {
+  font-size: 18px;
+}
+
+.history-filter-footer {
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.history-result-info {
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.history-page-info {
+  color: var(--text-tertiary);
+}
+
 @media (max-width: 768px) {
   .section-header {
     flex-direction: column;
@@ -523,10 +844,38 @@ const handleImport = async (event: Event) => {
     justify-content: center;
   }
 
+  .history-filter-panel {
+    padding: 16px;
+  }
+
+  .history-filter-group,
+  .history-filter-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .history-filter-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .history-search-item {
+    flex-basis: auto;
+  }
+
+  .history-result-info {
+    justify-content: space-between;
+  }
+
+  .filter-select,
+  .history-search-wrap {
+    width: 100%;
+  }
+
   .page-size-selector {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: space-between;
     gap: 8px;
   }
 }
@@ -548,6 +897,21 @@ const handleImport = async (event: Event) => {
   font-size: 14px;
   color: var(--text-secondary);
   margin-bottom: 24px;
+}
+
+.filter-empty-state .empty-text {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.empty-hint {
+  margin-bottom: 24px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.reset-filter-button {
+  box-shadow: none;
 }
 
 .start-button {

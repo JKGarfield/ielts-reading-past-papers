@@ -224,6 +224,14 @@ const translations: Record<Locale, Record<string, string>> = {
     'practice.deleteRecord': '删除记录',
     'practice.deleteRecordConfirm': '确认删除这条练习记录？此操作不可恢复。',
     'practice.recordDeleted': '记录已删除',
+    'practice.searchLabel': '查找题目',
+    'practice.searchPlaceholder': '搜索中英文标题或题目 ID...',
+    'practice.matchingRecords': '显示 {count} / {total} 条记录',
+    'practice.pageInfo': '第 {current} / {total} 页',
+    'practice.noMatchingRecords': '未找到匹配的练习记录',
+    'practice.noMatchingHint': '请尝试其他关键词或分类。',
+    'practice.clearSearch': '清除搜索',
+    'practice.resetFilters': '重置筛选',
 
     // 设置页面
     'settings.title': '系统设置',
@@ -642,6 +650,14 @@ const translations: Record<Locale, Record<string, string>> = {
     'practice.deleteRecord': 'Delete record',
     'practice.deleteRecordConfirm': 'Delete this practice record? This cannot be undone.',
     'practice.recordDeleted': 'Record deleted',
+    'practice.searchLabel': 'Find question',
+    'practice.searchPlaceholder': 'Search English/Chinese titles or question ID...',
+    'practice.matchingRecords': 'Showing {count} / {total} records',
+    'practice.pageInfo': 'Page {current} / {total}',
+    'practice.noMatchingRecords': 'No matching practice records',
+    'practice.noMatchingHint': 'Try another keyword or category.',
+    'practice.clearSearch': 'Clear search',
+    'practice.resetFilters': 'Reset filters',
 
     // Settings
     'settings.title': 'Settings',
