@@ -11,7 +11,14 @@
       </div>
     </div>
 
-    <div class="suite-entry"><div><strong>完整阅读模考</strong><span>三篇文章 · 40 题 · 60 分钟</span></div><button type="button" @click="router.push('/exam-setup')">组卷 / 模考记录 →</button></div>
+    <section class="suite-entry" aria-label="完整阅读模考">
+      <div class="suite-copy">
+        <span class="suite-eyebrow">IELTS ACADEMIC READING</span>
+        <strong>完整阅读模考</strong>
+        <span class="suite-description">三篇文章 · 40 题 · 60 分钟</span>
+      </div>
+      <button type="button" @click="router.push('/exam-setup')">开始完整模考 / 查看记录 <span aria-hidden="true">→</span></button>
+    </section>
     <div class="filter-section">
       <div class="filter-group">
         <div class="filter-item">
@@ -120,17 +127,9 @@
           </div>
 
           <div class="question-footer">
-            <button v-if="question.launchMode === 'unified'" class="view-pdf-btn" title="单篇模考 · 20 分钟" aria-label="单篇模考 · 20 分钟" @click.stop="router.push({ path: '/exam', query: { id: question.id } })"><span class="material-icons">timer</span></button>
-            <button class="view-pdf-btn" @click.stop="viewPdf(question)" :title="t('browse.viewPdf')" :disabled="!question.pdfPath">
-              <span class="material-icons">picture_as_pdf</span>
-            </button>
-            <button class="start-button" @click.stop="start(question)" :disabled="isNavigating && question.launchMode === 'unified'">
-              {{ question.launchMode === 'unified' ? t('browse.startPractice') : t('browse.openPdfOnly') }}
-              <span v-if="!(isNavigating && question.launchMode === 'unified')" class="material-icons action-icon">
-                {{ question.launchMode === 'unified' ? 'arrow_forward' : 'open_in_new' }}
-              </span>
-              <span v-else class="material-icons rotating action-icon">autorenew</span>
-            </button>
+            <button v-if="question.launchMode === 'unified'" type="button" class="practice-action simulation-action" title="单篇模考 · 20 分钟" @click.stop="router.push({ path: '/exam', query: { id: question.id } })">{{ currentLang === 'zh' ? '仿真练习(推荐)' : 'Exam practice' }}</button>
+            <button v-if="question.launchMode === 'unified'" type="button" class="practice-action" @click.stop="start(question)" :disabled="isNavigating">{{ currentLang === 'zh' ? '自由练习' : 'Free practice' }}</button>
+            <button type="button" class="practice-action pdf-action" @click.stop="viewPdf(question)" :title="t('browse.viewPdf')" :disabled="!question.pdfPath">PDF</button>
           </div>
         </div>
       </div>
@@ -1085,6 +1084,47 @@ watch(totalPages, (value) => {
 </style>
 
 <style scoped>
-.suite-entry { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding:18px 20px; margin-bottom:20px; border:1px solid var(--border-color); border-radius:10px; background:var(--bg-secondary); }
-.suite-entry strong { font-size:17px; margin-right:16px; }.suite-entry span { color:var(--text-secondary); font-size:14px; }.suite-entry button { border:1px solid var(--border-color); background:var(--bg-primary); color:var(--text-primary); padding:9px 16px; border-radius:6px; cursor:pointer; }
+.practice-action {
+  min-height: 42px; padding: 10px 12px; border: 1px solid var(--border-color);
+  border-radius: var(--radius-md); background: transparent; color: var(--text-primary);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.question-card .question-footer { gap: 8px; flex-wrap: wrap; }
+.simulation-action { flex: 1; background: #2563eb; border-color: #2563eb; color: #fff; }
+.practice-action:hover:not(:disabled) { border-color: #2563eb; box-shadow: 0 2px 8px #2563eb18; }
+.simulation-action:hover:not(:disabled) { background: #1d4ed8; }
+.practice-action:disabled { opacity: .5; cursor: not-allowed; }
+.practice-action:focus-visible, .suite-entry button:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
+.suite-entry {
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+  gap: 24px; padding: 26px 30px; margin-bottom: 24px; border: 1px solid #3971dc;
+  border-radius: 14px; background: linear-gradient(115deg, #173c86, #1e56bd); color: #fff;
+  box-shadow: 0 6px 20px #1e40af20;
+  animation: suite-arrive 500ms ease-out both;
+}
+.suite-copy { display: grid; gap: 6px; }
+.suite-eyebrow { font-size: 10px; letter-spacing: .14em; font-weight: 600; color: #bfdbfe; }
+.suite-copy strong { font-size: 24px; line-height: 1.4; }
+.suite-description { font-size: 14px; color: #dbeafe; }
+.suite-entry button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 16px;
+  min-height: 46px; padding: 12px 18px; border: 1px solid #ffffff70; border-radius: 8px;
+  background: #fff; color: #173c86; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.suite-entry button span { transition: transform 180ms ease; }
+.suite-entry button:hover { transform: translateY(-2px); box-shadow: 0 6px 16px #102b6350; }
+.suite-entry button:hover span { transform: translateX(3px); }
+@keyframes suite-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 600px) {
+  .suite-entry { padding: 22px; gap: 18px; }
+  .suite-entry button { width: 100%; }
+  .practice-action { padding: 10px; font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .suite-entry { animation: none; }
+  .suite-entry button, .suite-entry button span, .practice-action { transition: none; }
+  .suite-entry button:hover, .suite-entry button:hover span { transform: none; }
+}
 </style>

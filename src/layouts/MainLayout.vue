@@ -80,7 +80,6 @@
     </header>
 
     <main class="layout-content">
-      <p v-if="isStaticMode" style="text-align: center; margin: 0 0 12px"><a href="/open-source.html">{{ currentLang === 'zh' ? '源码与许可证' : 'Source & license' }}</a></p>
       <div class="content-wrapper">
         <SponsorContactAd v-if="!isStaticMode" ref="sponsorContactAdRef" :content="contactAd" />
 
@@ -142,6 +141,9 @@
         </transition>
       </div>
     </main>
+    <footer v-if="isStaticMode" class="source-footer">
+      <a href="/open-source.html">{{ currentLang === 'zh' ? '源码与许可证' : 'Source & license' }}</a>
+    </footer>
 
     <a-modal
       v-if="!isStaticMode"
@@ -1477,4 +1479,7 @@ watch(showMobileMenu, (open) => {
     margin-top: 64px;
   }
 }
+.source-footer { padding: 16px 24px 24px; text-align: center; font-size: 12px; }
+.source-footer a { color: var(--text-secondary); text-decoration: none; }
+.source-footer a:hover { color: var(--primary-color); text-decoration: underline; }
 </style>
