@@ -1,3 +1,4 @@
+import { isStaticMode } from '@/config/deployment'
 import { computed, ref } from 'vue'
 import { getLocalizedApiErrorMessage } from '@/api/authErrors'
 import { pullSyncSnapshot, pushSyncSnapshot } from '@/api/authSync'
@@ -225,6 +226,7 @@ function handleLocalChanged(): void {
 }
 
 export function installSyncManager(): void {
+  if (isStaticMode) return
   if (installed) {
     return
   }
@@ -235,10 +237,12 @@ export function installSyncManager(): void {
 }
 
 export async function bootstrapSyncAfterAuth(): Promise<void> {
+  if (isStaticMode) return
   await bootstrapRemoteSync()
 }
 
 export async function syncNow(): Promise<void> {
+  if (isStaticMode) return
   if (syncTimer) {
     clearTimeout(syncTimer)
     syncTimer = null

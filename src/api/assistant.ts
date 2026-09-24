@@ -1,3 +1,4 @@
+import { isStaticMode } from '@/config/deployment'
 import type { AssistantAnswerSection, AssistantConfidence, AssistantQueryRequest, AssistantQueryResponse } from '@/types/assistant'
 
 /** Normalize assistant API root (no trailing slash). */
@@ -14,6 +15,7 @@ let assistantPublicConfigPromise: Promise<void> | null = null
  * This can be kicked off during startup without blocking Vue mount. Assistant requests await it before sending.
  */
 export async function loadAssistantPublicConfig(): Promise<void> {
+  if (isStaticMode) return
   if (!assistantPublicConfigPromise) {
     assistantPublicConfigPromise = fetchAssistantPublicConfig()
   }
@@ -306,6 +308,7 @@ export function normalizeAssistantResponse(
 }
 
 export async function queryPracticeAssistant(payload: AssistantQueryRequest): Promise<AssistantQueryResponse> {
+  if (isStaticMode) throw new Error('AI assistant is unavailable in this deployment.')
   let response: Response
   const locale = payload.locale === 'en' ? 'en' : 'zh'
   await loadAssistantPublicConfig()
@@ -352,6 +355,7 @@ export async function queryPracticeAssistant(payload: AssistantQueryRequest): Pr
  * Events: start, delta, final, error
  */
 export async function* queryPracticeAssistantStream(payload: AssistantQueryRequest): AsyncGenerator<{ type: string; payload: unknown }> {
+  if (isStaticMode) throw new Error('AI assistant is unavailable in this deployment.')
   const locale = payload.locale === 'en' ? 'en' : 'zh'
   let response: Response
   await loadAssistantPublicConfig()

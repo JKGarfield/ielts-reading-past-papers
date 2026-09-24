@@ -1,3 +1,4 @@
+import { isStaticMode } from '@/config/deployment'
 import type { Router } from 'vue-router'
 
 const BAIDU_TONGJI_SCRIPT_ID = 'baidu-tongji-script'
@@ -36,6 +37,7 @@ export function normalizeBaiduTongjiPath(value: string): string {
 }
 
 export function isBaiduTongjiEnabled(options: BaiduTongjiOptions = {}): boolean {
+  if (isStaticMode) return false
   const enabled = options.enabled ?? import.meta.env.PROD
   const siteId = (options.siteId ?? import.meta.env.VITE_BAIDU_TONGJI_ID ?? '').trim()
   return enabled && siteId.length > 0

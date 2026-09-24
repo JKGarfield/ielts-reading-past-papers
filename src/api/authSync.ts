@@ -1,3 +1,4 @@
+import { isStaticMode } from '@/config/deployment'
 import { getAssistantApiBaseUrl } from '@/api/assistant'
 import type {
   AuthSessionResponse,
@@ -59,6 +60,7 @@ async function readJsonResponse<T>(response: Response): Promise<T> {
 }
 
 async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (isStaticMode) throw new ApiRequestError(0, 'static_mode', 'Accounts and cloud sync are unavailable in this deployment.')
   const headers = new Headers(init.headers)
   if (init.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')

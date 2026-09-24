@@ -1,3 +1,4 @@
+import { isStaticMode } from '@/config/deployment'
 import { createRouter, createWebHistory, type RouteLocationNormalizedLoaded } from 'vue-router'
 import MainLayout from '@/layouts/MainLayout.vue'
 import { NEW_SITE_URL } from '@/utils/siteMigration'
@@ -10,7 +11,7 @@ const MyAchievements = () => import('@/views/MyAchievements.vue')
 const ResetPassword = () => import('@/views/ResetPassword.vue')
 const NotFound = () => import('@/views/NotFound.vue')
 
-const SITE_URL = NEW_SITE_URL
+const SITE_URL = isStaticMode ? window.location.origin : NEW_SITE_URL
 const DEFAULT_TITLE = 'IELTS Reading Past Papers'
 const DEFAULT_DESCRIPTION = 'Practice IELTS Reading past papers online with a community question bank, PDF references, progress tracking, review tools, and an AI study assistant.'
 type QuestionHeadEntry = { id: string; title: string; category?: string }
@@ -70,7 +71,8 @@ async function applyRouteHead(to: RouteLocationNormalizedLoaded) {
   }
 
   const title = practiceModeHead?.title || (typeof to.meta.title === 'string' ? to.meta.title : DEFAULT_TITLE)
-  const description = practiceModeHead?.description || (typeof to.meta.description === 'string' ? to.meta.description : DEFAULT_DESCRIPTION)
+  const rawDescription = practiceModeHead?.description || (typeof to.meta.description === 'string' ? to.meta.description : DEFAULT_DESCRIPTION)
+  const description = isStaticMode ? rawDescription.replace(/,? and an AI study assistant/g, '') : rawDescription
   const robots = typeof to.meta.robots === 'string' ? to.meta.robots : 'index,follow'
   const canonicalUrl = `${SITE_URL}${to.path === '/' ? '/home' : to.path}`
 
@@ -160,6 +162,10 @@ const router = createRouter({
       ]
     }
   ]
+})
+
+router.beforeEach((to) => {
+  if (isStaticMode && to.path === '/reset-password') return '/home'
 })
 
 router.afterEach((to) => {

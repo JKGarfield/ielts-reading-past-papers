@@ -41,11 +41,13 @@
           <button class="quick-action" @click="toggleTheme" :title="isDarkMode ? t('theme.lightMode') : t('theme.darkMode')">
             <span class="material-icons action-icon">{{ isDarkMode ? 'light_mode' : 'dark_mode' }}</span>
           </button>
-          <div class="sync-indicator" :class="`sync-${sync.status.value}`" :title="syncTooltip">
+          <span v-if="isStaticMode" class="sync-label">{{ currentLang === 'zh' ? '记录保存在本机' : 'Records saved locally' }}</span>
+          <div v-if="!isStaticMode" class="sync-indicator" :class="`sync-${sync.status.value}`" :title="syncTooltip">
             <span v-if="authStore.isAuthenticated" class="material-icons sync-icon">{{ syncIcon }}</span>
             <span class="sync-label">{{ syncLabel }}</span>
           </div>
           <button
+            v-if="!isStaticMode"
             class="quick-action account-action"
             type="button"
             @click="openAuthPanel()"
@@ -55,6 +57,7 @@
             <span class="material-icons action-icon">{{ accountIcon }}</span>
           </button>
           <button
+            v-if="!isStaticMode"
             class="quick-action contact-action"
             type="button"
             title="消息通知"
@@ -64,7 +67,7 @@
           >
             <span class="material-icons action-icon" data-testid="sponsor-contact-campaign-icon">campaign</span>
           </button>
-          <a class="quick-action" href="https://github.com/hwttop5/ielts-reading-past-papers" target="_blank" rel="noopener noreferrer" :title="t('menu.github')">
+          <a class="quick-action" :href="isStaticMode ? 'https://github.com/JKGarfield/ielts-reading-past-papers/tree/deploy/cloudflare-static' : 'https://github.com/hwttop5/ielts-reading-past-papers'" target="_blank" rel="noopener noreferrer" :title="t('menu.github')">
             <svg class="github-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path fill="currentColor" d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
             </svg>
@@ -77,8 +80,9 @@
     </header>
 
     <main class="layout-content">
+      <p v-if="isStaticMode" style="text-align: center; margin: 0 0 12px"><a href="/open-source.html">{{ currentLang === 'zh' ? '源码与许可证' : 'Source & license' }}</a></p>
       <div class="content-wrapper">
-        <SponsorContactAd ref="sponsorContactAdRef" :content="contactAd" />
+        <SponsorContactAd v-if="!isStaticMode" ref="sponsorContactAdRef" :content="contactAd" />
 
         <transition name="slide-down">
           <div v-if="showMigrationNotice" class="pwa-banner migration-banner" data-testid="migration-banner">
@@ -140,6 +144,7 @@
     </main>
 
     <a-modal
+      v-if="!isStaticMode"
       v-model:open="authPanelOpen"
       :title="authModalTitle"
       :footer="null"
@@ -273,7 +278,7 @@
               <!-- GitHub -->
               <a
                 class="mobile-nav-item"
-                href="https://github.com/hwttop5/ielts-reading-past-papers"
+                :href="isStaticMode ? 'https://github.com/JKGarfield/ielts-reading-past-papers/tree/deploy/cloudflare-static' : 'https://github.com/hwttop5/ielts-reading-past-papers'"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -291,6 +296,7 @@
 </template>
 
 <script setup lang="ts">
+import { isStaticMode } from '@/config/deployment'
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useThemeStore } from '@/store/themeStore'
@@ -337,7 +343,7 @@ const authPassword = ref('')
 const authSubmitting = ref(false)
 const passwordResetSubmitting = ref(false)
 const authError = ref('')
-const showMigrationNotice = shouldShowMigrationNotice()
+const showMigrationNotice = !isStaticMode && shouldShowMigrationNotice()
 
 // 一级导航菜单 - 更多工具提升为一级
 const mainMenuItems = [
@@ -623,7 +629,7 @@ onMounted(() => {
 
   document.addEventListener('keydown', handleKeydown)
   window.addEventListener('scroll', handleScroll, { passive: true })
-  void refreshContactAd()
+  if (!isStaticMode) void refreshContactAd()
 })
 
 watch(

@@ -41,7 +41,8 @@
     "rag:up": "docker compose -f docker-compose.rag.local.yml up -d",
     "rag:down": "docker compose -f docker-compose.rag.local.yml down",
     "rag:logs": "docker compose -f docker-compose.rag.local.yml logs -f",
-    "rag:ps": "docker compose -f docker-compose.rag.local.yml ps"
+    "rag:ps": "docker compose -f docker-compose.rag.local.yml ps",
+    "build:static": "node scripts/build-static.mjs"
   },
   "dependencies": {
     "ant-design-vue": "^4.0.0",

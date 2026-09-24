@@ -1,3 +1,4 @@
+import { isStaticMode } from '@/config/deployment'
 import { defineStore } from 'pinia'
 import {
   confirmPasswordReset,
@@ -54,6 +55,10 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async bootstrapSession() {
+      if (isStaticMode) {
+        this.setSession(null, null, 'bootstrap')
+        return
+      }
       this.status = 'loading'
       try {
         const response = await getCurrentSession()

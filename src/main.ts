@@ -1,3 +1,4 @@
+import { isStaticMode } from '@/config/deployment'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { Modal } from 'ant-design-vue'
@@ -19,7 +20,7 @@ import { useAuthStore } from './store/authStore'
 import { installSyncManager, loadLocalStores } from './sync/syncManager'
 
 function bootstrap() {
-  void loadAssistantPublicConfig()
+  if (!isStaticMode) void loadAssistantPublicConfig()
 
   if (typeof window !== 'undefined') {
     runAppMigration()
@@ -46,7 +47,7 @@ function bootstrap() {
   }
 
   app.use(pinia)
-  installBaiduTongji(router)
+  if (!isStaticMode) installBaiduTongji(router)
   app.use(router)
   app.use(Modal)
 
@@ -55,8 +56,10 @@ function bootstrap() {
   useSettingStore(pinia)
   useThemeStore(pinia)
   loadLocalStores()
-  installSyncManager()
-  void useAuthStore(pinia).bootstrapSession()
+  if (!isStaticMode) {
+    installSyncManager()
+    void useAuthStore(pinia).bootstrapSession()
+  }
 
   app.mount('#app')
   setupPwa()

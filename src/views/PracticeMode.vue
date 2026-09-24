@@ -332,7 +332,7 @@
     </div>
 
     <PracticeAssistant
-      v-if="!embedded && question?.launchMode === 'unified' && (!isExamInterface || session.submitted)"
+      v-if="!isStaticMode && !embedded && question?.launchMode === 'unified' && (!isExamInterface || session.submitted)"
       :question-id="question.id"
       :question-title="displayTitle"
       :question-title-localized="''"
@@ -346,6 +346,7 @@
 </template>
 
 <script setup lang="ts">
+import { isStaticMode } from '@/config/deployment'
 import { computed, inject, nextTick, onErrorCaptured, onMounted, onUnmounted, proxyRefs, provide, ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'

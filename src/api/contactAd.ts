@@ -1,3 +1,4 @@
+import { isStaticMode } from '@/config/deployment'
 import { getAssistantApiBaseUrl } from '@/api/assistant'
 import type { ContactAdPayload } from '@/types/contactAd'
 
@@ -38,6 +39,7 @@ function normalizeContactAdPayload(value: unknown): ContactAdPayload {
 }
 
 export async function loadContactAdConfig(): Promise<ContactAdPayload> {
+  if (isStaticMode) return EMPTY_CONTACT_AD
   try {
     const response = await fetch(buildApiUrl('/api/contact-ad'), {
       cache: 'no-store'

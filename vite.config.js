@@ -5,6 +5,7 @@ import { resolve } from 'path'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const staticMode = (process.env.VITE_STATIC_MODE || env.VITE_STATIC_MODE) === 'true'
   const assistantFromEnv =
     env.VITE_ASSISTANT_API_BASE_URL || process.env.VITE_ASSISTANT_API_BASE_URL || ''
   const selfHostedSameOrigin =
@@ -17,7 +18,7 @@ export default defineConfig(({ mode }) => {
   const isVercelBuild =
     Boolean(process.env.VERCEL || process.env.VERCEL_URL || process.env.VERCEL_ENV)
 
-  if (mode === 'production' && !selfHostedSameOrigin && !skipCheck && !String(assistantFromEnv).trim()) {
+  if (mode === 'production' && !staticMode && !selfHostedSameOrigin && !skipCheck && !String(assistantFromEnv).trim()) {
     throw new Error(
       '[vite] Production build requires VITE_ASSISTANT_API_BASE_URL (https://your-assistant-host, no trailing slash). ' +
         'Set it in Vercel / CI env, enable VITE_SELF_HOSTED_SAME_ORIGIN=1 for bundled nginx same-origin deployment, or use SKIP_ASSISTANT_ENV_CHECK=1 for a local production bundle test only.'
