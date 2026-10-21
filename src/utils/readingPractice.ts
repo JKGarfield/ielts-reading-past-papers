@@ -24,6 +24,7 @@ export interface PracticeRecordSnapshotInput {
   markedQuestions: string[]
   highlights: PracticeHighlightRecord[]
   mode: PracticeRouteMode
+  notesText?: string
 }
 
 export interface PracticeRouteContext {
@@ -381,7 +382,8 @@ export function buildPracticeSessionResult(input: PracticeRecordSnapshotInput): 
       type: 'reading',
       practiceMode: input.mode,
       markedQuestions: input.markedQuestions || [],
-      highlights: input.highlights || []
+      highlights: input.highlights || [],
+      notesText: input.notesText || ''
     }
   }
 }

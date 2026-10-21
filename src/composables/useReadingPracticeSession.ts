@@ -234,6 +234,7 @@ export function useReadingPracticeSession(options: SessionOptions) {
         return
       }
       result.value = record.resultSnapshot
+      notesText.value = record.resultSnapshot.metadata.notesText || ''
       draftState.value = hydrateDraftState(exam.value, record.resultSnapshot.answers)
       markedQuestions.value = Array.isArray(record.markedQuestions) ? record.markedQuestions : Array.isArray(record.resultSnapshot.metadata.markedQuestions) ? record.resultSnapshot.metadata.markedQuestions : []
       highlights.value = Array.isArray(record.highlights) ? record.highlights : Array.isArray(record.resultSnapshot.metadata.highlights) ? record.resultSnapshot.metadata.highlights : []
@@ -428,7 +429,8 @@ export function useReadingPracticeSession(options: SessionOptions) {
       answers: answerMap.value,
       markedQuestions: markedQuestions.value,
       highlights: highlights.value,
-      mode: options.mode.value
+      mode: options.mode.value,
+      notesText: notesText.value
     })
     result.value = nextResult
     submitted.value = true

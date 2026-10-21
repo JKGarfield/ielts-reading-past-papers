@@ -164,9 +164,9 @@
 
 .exam-mode :deep(.native-choice-input) { width:16px; height:16px; flex-shrink:0; margin:0 12px 0 0; vertical-align:middle; }
 .exam-mode :deep(td .native-choice-input) { margin:0; }
-.exam-mode :deep(th) { padding:20px 12px; }
-.exam-mode :deep(td) { padding:16px 12px; }
-.exam-mode :deep(td:first-child) { width:52%; }
+.exam-mode :deep(table:has(.native-choice-input) th) { padding:20px 12px; }
+.exam-mode :deep(table:has(.native-choice-input) td) { padding:16px 12px; }
+.exam-mode :deep(table:has(.native-choice-input) td:first-child) { width:52%; }
 .exam-mode .passage-content :deep(.native-paragraph-bookmark) { right:-32px; }
 .exam-mode :deep(.native-option-chip) { max-width:100%; text-align:left; }
 .exam-mode :deep(.native-dropzone) { max-width:100%; }

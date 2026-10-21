@@ -258,5 +258,6 @@ export interface PracticeSessionResult {
     practiceMode: PracticeRouteMode
     markedQuestions: string[]
     highlights: PracticeHighlightRecord[]
+    notesText?: string
   }
 }

@@ -297,6 +297,7 @@
               <textarea
                 v-model="session.notesText"
                 class="notes-textarea"
+                :readonly="session.readOnly"
                 aria-label="Session notes"
                 placeholder="Write quick clues, paragraph links, or elimination notes here..."
               ></textarea>
@@ -625,6 +626,7 @@ watch(clockReady, ready => {
   const record = practiceStore.records.find(item => item.id === suiteSessionId.value)
   if (record?.resultSnapshot && sessionState.exam.value) {
     sessionState.result.value = record.resultSnapshot
+    sessionState.notesText.value = record.resultSnapshot.metadata.notesText || ''
     sessionState.draftState.value = hydrateDraftState(sessionState.exam.value, record.resultSnapshot.answers)
     sessionState.highlights.value = record.highlights || []
     sessionState.markedQuestions.value = record.markedQuestions || []
@@ -1299,6 +1301,7 @@ function submitForSuite(): SuitePassageSnapshot | null {
 function restoreSuiteResult(snapshot: SuitePassageSnapshot) {
   if (!sessionState.exam.value || snapshot.id !== questionId.value) return
   sessionState.result.value = snapshot.result
+  sessionState.notesText.value = snapshot.result.metadata.notesText || ''
   sessionState.draftState.value = hydrateDraftState(sessionState.exam.value, snapshot.result.answers)
   sessionState.highlights.value = snapshot.highlights || []
   sessionState.markedQuestions.value = snapshot.markedQuestions || []

@@ -72,6 +72,7 @@ describe('useReadingPracticeSession', () => {
     const restored = await createTestSession({ mode: 'simulation', suiteSessionId: 'notes-refresh' })
     scopes.push(restored.scope)
     expect(restored.session.notesText.value).toBe('Paragraph C: compare the two methods')
+    expect(restored.session.submit()?.metadata.notesText).toBe('Paragraph C: compare the two methods')
   })
 
   it('rejects options from an unrelated pool and moves a unique heading between paragraphs', async () => {
