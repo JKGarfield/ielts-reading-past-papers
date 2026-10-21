@@ -30,8 +30,12 @@
         :selected-option-key="selectedOptionKey"
         :highlights="highlights"
         :used-option-values="usedOptionValues"
+        :reusable-pool-ids="reusablePoolIds"
+        :marked-questions="markedQuestions"
+        :active-question-id="activeQuestionId"
         :node-path-prefix="nodePath(index)"
         :exam-style="examStyle"
+        :show-all-choices="showAllChoices"
         :question-display-map="questionDisplayMap"
         :summary-node-path="childSummaryNodePath(node, index)"
         :inside-choice-question="insideChoiceQuestion || isExamChoiceQuestionElement(node)"
@@ -42,6 +46,7 @@
         @select:option="emit('select:option', $event)"
         @set:dropzone="emit('set:dropzone', $event)"
         @clear:dropzone="emit('clear:dropzone', $event)"
+        @toggle:review="emit('toggle:review', $event)"
         @open:note="emit('open:note', $event)"
         @open:highlight="emit('open:highlight', $event)"
       />
@@ -58,6 +63,7 @@
       :data-choice-value="node.value"
       :data-question="node.questionId"
       :data-nav-target="node.questionId"
+      :title="examStyle ? `Question ${questionNumber(node.questionId)}: ${node.value}` : undefined"
       :checked="isChoiceChecked(node.fieldName, node.value)"
       :disabled="readOnly"
       @change="handleChoiceChange(node, $event)"
@@ -109,48 +115,64 @@
       </option>
     </select>
 
-    <div
-      v-else-if="node.type === 'dropzone'"
-      class="native-dropzone"
-      v-bind="controlAttrs(node.attrs)"
-      :data-question="node.questionId"
-      :data-nav-target="node.questionId"
-      role="button"
-      :tabindex="readOnly ? -1 : 0"
-      :aria-disabled="readOnly ? 'true' : undefined"
-      :aria-label="dropzoneAriaLabel(node.questionId)"
-      :class="[
-        `appearance-${node.appearance}`,
-        {
-          filled: Boolean(dropzoneValue(node.questionId)),
-          active: selectedOptionKey && !readOnly
-        }
-      ]"
-      @dragover.prevent
-      @drop.prevent="handleDrop(node, $event)"
-      @click="handleDropzoneClick(node)"
-      @keydown="handleDropzoneKeydown(node, $event)"
-    >
-      <span class="dropzone-main">
-        <strong v-if="!examStyle && node.appearance === 'paragraph' && node.paragraph" class="dropzone-prefix">
-          {{ node.paragraph }}
-        </strong>
-        <span class="dropzone-text">
-          {{ dropzoneDisplay(node) }}
-        </span>
-      </span>
-      <button
-        v-if="dropzoneValue(node.questionId) && !readOnly"
-        type="button"
-        class="dropzone-clear"
-        @click.stop="emit('clear:dropzone', node.questionId)"
+    <template v-else-if="node.type === 'dropzone'">
+      <div
+        class="native-dropzone"
+        v-bind="controlAttrs(node.attrs)"
+        :data-question="node.questionId"
+        :data-nav-target="node.questionId"
+        role="button"
+        :tabindex="readOnly ? -1 : 0"
+        :aria-disabled="readOnly ? 'true' : undefined"
+        :aria-label="dropzoneAriaLabel(node)"
+        :class="[
+          `appearance-${node.appearance}`,
+          {
+            filled: Boolean(dropzoneValue(node.questionId)),
+            active: selectedOptionKey && !readOnly
+          }
+        ]"
+        @dragover.prevent
+        @drop.prevent="handleDrop(node, $event)"
+        @click.stop="handleDropzoneClick(node)"
+        @keydown="handleDropzoneKeydown(node, $event)"
+        @pointerdown="handleFilledPointerDown(node, $event)"
+        @dragstart="handleFilledDragStart(node, $event)"
+        :draggable="examStyle && !readOnly && Boolean(dropzoneValue(node.questionId)) && nativeDragFallback"
       >
-        <span class="material-icons">close</span>
-      </button>
-    </div>
+        <span class="dropzone-main">
+          <strong v-if="!examStyle && node.appearance === 'paragraph' && node.paragraph" class="dropzone-prefix">
+            {{ node.paragraph }}
+          </strong>
+          <span class="dropzone-text">
+            {{ dropzoneDisplay(node) }}
+          </span>
+        </span>
+        <button
+          v-if="dropzoneValue(node.questionId) && !readOnly && !(examStyle && node.appearance === 'paragraph')"
+          type="button"
+          class="dropzone-clear"
+          :aria-label="`Clear answer for question ${questionNumber(node.questionId)}`"
+          @click.stop="emit('clear:dropzone', node.questionId)"
+        >
+          <span class="material-icons">close</span>
+        </button>
+      </div>
+      <button
+        v-if="examStyle && node.appearance === 'paragraph' && (!activeQuestionId || activeQuestionId === node.questionId || markedQuestions?.includes(node.questionId))"
+        type="button"
+        class="native-paragraph-bookmark"
+        :class="{ marked: markedQuestions?.includes(node.questionId) }"
+        :aria-label="`${markedQuestions?.includes(node.questionId) ? 'Remove review mark from' : 'Mark'} question ${questionNumber(node.questionId)}${markedQuestions?.includes(node.questionId) ? '' : ' for review'}`"
+        :aria-pressed="Boolean(markedQuestions?.includes(node.questionId))"
+        :disabled="readOnly"
+        @click.stop="emit('toggle:review', node.questionId)"
+      ><svg aria-hidden="true" viewBox="0 0 24 24" :fill="markedQuestions?.includes(node.questionId) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.7"><path d="M5 3.5h14v17l-7-4.5-7 4.5z"/></svg></button>
+    </template>
 
     <button
       v-else-if="node.type === 'optionChip'"
+      v-show="!examStyle || !isOptionUsed(node.poolId, node.value) || reusablePoolIds?.includes(node.poolId)"
       type="button"
       class="native-option-chip"
       :class="{
@@ -166,7 +188,7 @@
       @pointercancel="handleOptionPointerCancel"
       @dragstart="handleOptionDragStart(node, $event)"
     >
-      {{ node.label || node.value }}
+      {{ optionDisplay(node) }}
     </button>
   </template>
 </template>
@@ -212,8 +234,12 @@ const props = defineProps<{
   selectedOptionKey: string
   highlights: PracticeHighlightRecord[]
   usedOptionValues: Record<string, string[]>
+  reusablePoolIds?: string[]
+  markedQuestions?: string[]
+  activeQuestionId?: string
   nodePathPrefix?: string
   examStyle?: boolean
+  showAllChoices?: boolean
   questionDisplayMap?: Record<string, string>
   summaryNodePath?: string
   insideChoiceQuestion?: boolean
@@ -227,6 +253,7 @@ const emit = defineEmits<{
   (e: 'select:option', payload: ReadingOptionChipNode): void
   (e: 'set:dropzone', payload: { questionId: string; poolId: string; value: string; label: string }): void
   (e: 'clear:dropzone', questionId: string): void
+  (e: 'toggle:review', questionId: string): void
   (e: 'open:note', payload: { record: PracticeHighlightRecord; top: number; left: number }): void
   (e: 'open:highlight', payload: { record: PracticeHighlightRecord; top: number; left: number }): void
 }>()
@@ -296,19 +323,22 @@ function questionNumber(questionId: string): string {
 }
 
 function controlPlaceholder(existing: string | undefined, questionId: string): string {
-  return existing?.trim() ? existing : (props.examStyle ? questionNumber(questionId) : '')
+  return existing?.trim() && !(props.examStyle && /^\d+$/.test(existing.trim())) ? existing : ''
 }
 
 function controlAriaLabel(attrs: Record<string, string>, questionId: string): string | undefined {
   return props.examStyle ? `Question ${questionNumber(questionId)}` : attrs['aria-label']
 }
 
-function dropzoneAriaLabel(questionId: string): string {
-  return `Question ${questionNumber(questionId)} answer dropzone`
+function dropzoneAriaLabel(node: ReadingDropzoneNode): string {
+  if (props.examStyle && node.appearance === 'paragraph' && dropzoneValue(node.questionId)) {
+    return `Question ${questionNumber(node.questionId)} answer ${dropzoneDisplay(node)}. Activate to remove answer`
+  }
+  return `Question ${questionNumber(node.questionId)} answer dropzone`
 }
 
 function collapsibleChoice(node: ReadingElementNode) {
-  if (!props.examStyle || props.insideChoiceQuestion) {
+  if (!props.examStyle || props.showAllChoices || props.insideChoiceQuestion) {
     return null
   }
   return matchExamChoiceCollapse(node)
@@ -389,7 +419,9 @@ function dropzoneValue(questionId: string) {
 function dropzoneDisplay(node: ReadingDropzoneNode): string {
   const current = dropzoneValue(node.questionId)
   if (current) {
-    return current.label || current.value
+    return props.examStyle
+      ? headingOptionLabel(current.label || current.value, current.value)
+      : current.label || current.value
   }
   if (props.examStyle) {
     return questionNumber(node.questionId)
@@ -398,6 +430,33 @@ function dropzoneDisplay(node: ReadingDropzoneNode): string {
     return node.labelText || 'Choose heading'
   }
   return 'Drop or click option here'
+}
+
+function headingOptionLabel(label: string, value: string): string {
+  if (!/^[ivxlcdm]+$/i.test(value) && !/^[A-Z]$/.test(value)) return label
+  const numeral = /^[ivxlcdm]+$/i.test(value) && !/^[A-H]$/.test(value) ? value.toLowerCase() : value
+  return label.replace(new RegExp(`^${value}(?:[.\\s]+|$)`, 'i'), `${numeral}.`)
+}
+
+function optionDisplay(node: ReadingOptionChipNode): string {
+  const label = node.label || node.value
+  return props.examStyle ? headingOptionLabel(label, node.value) : label
+}
+
+function filledOption(node: ReadingDropzoneNode): ReadingOptionChipNode | null {
+  const value = dropzoneValue(node.questionId)
+  return props.examStyle && value ? { type: 'optionChip', ...value, label: dropzoneDisplay(node), attrs: {} } : null
+}
+
+function handleFilledPointerDown(node: ReadingDropzoneNode, event: PointerEvent) {
+  if ((event.target as Element)?.closest('button')) return
+  const option = filledOption(node)
+  if (option) handleOptionPointerDown(option, event)
+}
+
+function handleFilledDragStart(node: ReadingDropzoneNode, event: DragEvent) {
+  const option = filledOption(node)
+  if (option) handleOptionDragStart(option, event)
 }
 
 function isChoiceChecked(fieldName: string, value: string): boolean {
@@ -737,7 +796,15 @@ function handleDrop(node: ReadingDropzoneNode, event: DragEvent) {
 }
 
 function handleDropzoneClick(node: ReadingDropzoneNode) {
-  if (!props.selectedOptionKey || props.readOnly) {
+  if (props.readOnly) {
+    return
+  }
+  if (!props.selectedOptionKey) {
+    const current = dropzoneValue(node.questionId)
+    if (current && suppressClickOptionKey === optionKey(current.poolId, current.value)) return
+    if (props.examStyle && node.appearance === 'paragraph' && dropzoneValue(node.questionId)) {
+      emit('clear:dropzone', node.questionId)
+    }
     return
   }
   const separatorIndex = props.selectedOptionKey.indexOf('::')
@@ -755,6 +822,11 @@ function handleDropzoneClick(node: ReadingDropzoneNode) {
 }
 
 function handleDropzoneKeydown(node: ReadingDropzoneNode, event: KeyboardEvent) {
+  if (['Delete', 'Backspace'].includes(event.key) && !props.readOnly && dropzoneValue(node.questionId)) {
+    event.preventDefault()
+    emit('clear:dropzone', node.questionId)
+    return
+  }
   if (event.key !== 'Enter' && event.key !== ' ') {
     return
   }

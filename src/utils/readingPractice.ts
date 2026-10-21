@@ -436,7 +436,8 @@ export function readSimulationDraft(context: PracticeRouteContext): PracticeSess
           .map((entry) => normalizePracticeHighlightRecord(entry))
           .filter((entry): entry is PracticeHighlightRecord => Boolean(entry))
         : [],
-      scrollState: normalizeScrollState(parsed.scrollState)
+      scrollState: normalizeScrollState(parsed.scrollState),
+      notesText: typeof parsed.notesText === 'string' ? parsed.notesText : ''
     }
   } catch {
     return null
@@ -462,13 +463,15 @@ export function createDraftSnapshot(
   draftState: PracticeDraftState,
   markedQuestions: string[],
   highlights: PracticeHighlightRecord[],
-  scrollState: PracticeScrollState
+  scrollState: PracticeScrollState,
+  notesText = ''
 ): PracticeSessionDraft {
   return {
     answers: collectAnswers(exam, draftState),
     markedQuestions,
     highlights,
-    scrollState
+    scrollState,
+    notesText
   }
 }
 

@@ -26,7 +26,7 @@ export function adaptExamMatching(source: ReadingExamDocument): ReadingExamDocum
       element('p', [element('strong', [text(exam.questionDisplayMap[statement.questionId])]), text(` ${statement.text}`)]),
       { type: 'dropzone', appearance: 'match', questionId: statement.questionId, paragraph: '', labelText: '', attrs: { id: `exam-match-${statement.questionId}` } } as ReadingAstNode
     ], { class: 'exam-matching-item' })),
-    element('h4', [text(spec.poolTitle || (spec.kind === 'people' ? 'List of People' : 'List of Endings'))]),
+    element('h3', [text(spec.poolTitle || (spec.kind === 'people' ? 'List of People' : 'List of Endings'))]),
     element('div', spec.options.map(option => ({ type: 'optionChip', poolId, value: option.value, label: option.label, attrs: {} })), { class: 'exam-matching-pool' })
   ]
   if (source.examId === 'p3-medium-183') {

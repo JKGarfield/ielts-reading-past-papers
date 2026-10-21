@@ -63,6 +63,31 @@ describe('useReadingPracticeSession', () => {
     vi.restoreAllMocks()
   })
 
+  it('restores scratchpad notes with a simulation draft after refresh', async () => {
+    const first = await createTestSession({ mode: 'simulation', suiteSessionId: 'notes-refresh' })
+    scopes.push(first.scope)
+    first.session.notesText.value = 'Paragraph C: compare the two methods'
+    await nextTick()
+    first.scope.stop()
+    const restored = await createTestSession({ mode: 'simulation', suiteSessionId: 'notes-refresh' })
+    scopes.push(restored.scope)
+    expect(restored.session.notesText.value).toBe('Paragraph C: compare the two methods')
+  })
+
+  it('rejects options from an unrelated pool and moves a unique heading between paragraphs', async () => {
+    const { scope, session } = await createTestSession({ examId: 'p2-low-75' })
+    scopes.push(scope)
+    const option = session.exam.value!.options[0]
+    session.setDropzoneValue('q1', { ...option, poolId: 'unrelated' })
+    expect(session.answerMap.value.q1).toBe('')
+    session.setDropzoneValue('q1', option)
+    session.setDropzoneValue('q2', option)
+    expect(session.answerMap.value.q1).toBe('')
+    expect(session.answerMap.value.q2).toBe('I')
+    session.clearDropzoneValue('q2')
+    expect(session.usedOptionValuesByPool.value[option.poolId]).toEqual([])
+  })
+
   it('limits checkbox selections by the choice field while preserving single-question multi-answer fields', async () => {
     const { scope, session } = await createTestSession()
     scopes.push(scope)

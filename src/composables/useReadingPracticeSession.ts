@@ -16,6 +16,7 @@ import {
   buildQuestionGroupMeta,
   clearSimulationDraft as removeSimulationDraft,
   collectAnswers,
+  canonicalizeAnswerToken,
   createDraftSnapshot,
   createEmptyDraftState,
   createEmptyScrollState,
@@ -73,6 +74,7 @@ export function useReadingPracticeSession(options: SessionOptions) {
 
   const answerMap = computed(() => (exam.value ? collectAnswers(exam.value, draftState.value) : {}))
   const questionGroupMetaByQuestionId = computed(() => (exam.value ? buildQuestionGroupMeta(exam.value) : {}))
+  const reusablePoolIds = computed(() => [...new Set(Object.values(questionGroupMetaByQuestionId.value).filter(group => group.allowOptionReuse).flatMap(group => group.poolIds))])
   const usedOptionValuesByPool = computed<Record<string, string[]>>(() => {
     if (!exam.value) {
       return {}
@@ -210,6 +212,7 @@ export function useReadingPracticeSession(options: SessionOptions) {
       highlights.value = []
       scrollState.value = createEmptyScrollState()
       selectedOptionKey.value = ''
+      notesText.value = ''
       return
     }
 
@@ -222,6 +225,7 @@ export function useReadingPracticeSession(options: SessionOptions) {
       : safelyRunStorageAction(() => getStoredMarkedQuestions(exam.value!.examId), [])
     highlights.value = []
     scrollState.value = createEmptyScrollState()
+    notesText.value = ''
 
     if (reviewMode.value) {
       const record = practiceStore.records.find((entry) => entry.id === options.recordId.value)
@@ -244,6 +248,7 @@ export function useReadingPracticeSession(options: SessionOptions) {
         markedQuestions.value = storedDraft.markedQuestions || []
         highlights.value = storedDraft.highlights || []
         scrollState.value = storedDraft.scrollState
+        notesText.value = storedDraft.notesText || ''
       }
     }
   }
@@ -323,6 +328,9 @@ export function useReadingPracticeSession(options: SessionOptions) {
     if (!exam.value || readOnly.value) {
       return
     }
+    const group = questionGroupMetaByQuestionId.value[questionId]
+    if (!exam.value.fields.dropzoneQuestions.includes(questionId) || !group?.poolIds.includes(payload.poolId)
+      || !exam.value.options.some(option => option.poolId === payload.poolId && canonicalizeAnswerToken(option.value) === canonicalizeAnswerToken(payload.value))) return
     draftState.value = assignDropzoneValue(
       draftState.value,
       exam.value,
@@ -455,7 +463,8 @@ export function useReadingPracticeSession(options: SessionOptions) {
           draftState.value,
           markedQuestions.value,
           highlights.value,
-          scrollState.value
+          scrollState.value,
+          notesText.value
         )
       ),
       undefined
@@ -482,7 +491,7 @@ export function useReadingPracticeSession(options: SessionOptions) {
   )
 
   watch(
-    [draftState, markedQuestions, highlights, scrollState],
+    [draftState, markedQuestions, highlights, scrollState, notesText],
     () => {
       persistDraftSnapshot()
     },
@@ -510,6 +519,7 @@ export function useReadingPracticeSession(options: SessionOptions) {
     answerMap,
     questionGroupMetaByQuestionId,
     usedOptionValuesByPool,
+    reusablePoolIds,
     setTextAnswer,
     setTextareaAnswer,
     setSelectAnswer,

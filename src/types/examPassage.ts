@@ -23,5 +23,6 @@ export interface SuitePassageHandle {
   clearSuiteDraft(): void
   navigateToQuestion(questionId: string, anchorId: string): Promise<void>
   toggleReview(questionId: string): void
+  toggleNotes(): void
   reload(): Promise<void>
 }

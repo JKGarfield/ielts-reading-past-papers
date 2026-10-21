@@ -1,5 +1,5 @@
 export type PracticeRouteMode = 'single' | 'review' | 'simulation'
-export type PracticeFontScale = 'small' | 'medium' | 'large'
+export type PracticeFontScale = 'small' | 'medium' | 'large' | 'extra-large'
 export type HighlightScope = 'passage' | 'questions'
 
 export interface ReadingTextNode {
@@ -224,6 +224,7 @@ export interface PracticeSessionDraft {
   markedQuestions: string[]
   highlights: PracticeHighlightRecord[]
   scrollState: PracticeScrollState
+  notesText?: string
 }
 
 export interface PracticeAnswerComparisonEntry {

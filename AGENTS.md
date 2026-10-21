@@ -19,6 +19,8 @@
 
 ## 常用命令
 
+本分支 Cloudflare 配置见 `docs/cloudflare-deployment.md`。用户可用 `bash scripts/cloudflare-keychain.sh setup` 在终端隐藏输入 API Token，用 `verify` 只读验证。凭据存于 macOS 钥匙串，勿输出或写入项目；配置凭据不等于授权发布。
+
 ```bash
 npm run dev
 npm run dev:status

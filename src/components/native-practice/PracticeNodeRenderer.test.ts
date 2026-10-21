@@ -3,27 +3,31 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import PracticeNodeRenderer from './PracticeNodeRenderer.vue'
 import { createEmptyDraftState } from '@/utils/readingPractice'
-import type { PracticeHighlightRecord, ReadingAstNode } from '@/types/readingNative'
+import type { PracticeDraftState, PracticeHighlightRecord, ReadingAstNode } from '@/types/readingNative'
 
 function mountRenderer(nodes: ReadingAstNode[], options: {
   namespace?: string
   examStyle?: boolean
+  showAllChoices?: boolean
   selectedOptionKey?: string
   highlights?: PracticeHighlightRecord[]
   questionDisplayMap?: Record<string, string>
+  draftState?: PracticeDraftState
+  usedOptionValues?: Record<string, string[]>
 } = {}) {
   return mount(PracticeNodeRenderer, {
     global: { provide: { 'practice-dom-prefix': ref(options.namespace || '') } },
     props: {
       nodes,
       scope: 'questions',
-      draftState: createEmptyDraftState(),
+      draftState: options.draftState || createEmptyDraftState(),
       submitted: false,
       readOnly: false,
       selectedOptionKey: options.selectedOptionKey || '',
       highlights: options.highlights || [],
-      usedOptionValues: {},
+      usedOptionValues: options.usedOptionValues || {},
       examStyle: options.examStyle,
+      showAllChoices: options.showAllChoices,
       questionDisplayMap: options.questionDisplayMap
     }
   })
@@ -80,6 +84,10 @@ describe('PracticeNodeRenderer exam style', () => {
     const normalWrapper = mountRenderer([question])
     expect(normalWrapper.find('details').exists()).toBe(false)
     expect(normalWrapper.get('div.mc-question-item').exists()).toBe(true)
+
+    const mockWrapper = mountRenderer([question], { examStyle: true, showAllChoices: true })
+    expect(mockWrapper.find('details').exists()).toBe(false)
+    expect(mockWrapper.findAll('input[type="radio"]')).toHaveLength(2)
   })
 
   it('passes examStyle recursively and labels text controls by question number', () => {
@@ -99,7 +107,7 @@ describe('PracticeNodeRenderer exam style', () => {
     }], { examStyle: true, questionDisplayMap: { q12: '32', q13: '33' } })
 
     const input = wrapper.get('input.native-text-input')
-    expect(input.attributes('placeholder')).toBe('32')
+    expect(input.attributes('placeholder')).toBe('')
     expect(input.attributes('aria-label')).toBe('Question 32')
 
     const textarea = wrapper.get('textarea')
@@ -180,6 +188,31 @@ describe('PracticeNodeRenderer exam style', () => {
       value: 'iii',
       label: 'iii'
     }])
+  })
+
+  it('shows the assigned heading at the paragraph and returns it to the pool when cleared', async () => {
+    const draftState = createEmptyDraftState()
+    draftState.dropzoneAnswers.q14 = { poolId: 'headings', value: 'I', label: 'i Tried and tested solutions' }
+    const wrapper = mountRenderer([
+      { type: 'dropzone', appearance: 'paragraph', questionId: 'q14', paragraph: 'A', labelText: 'Paragraph A', attrs: {} },
+      { type: 'optionChip', poolId: 'headings', value: 'i', label: 'i Tried and tested solutions', attrs: {} }
+    ], {
+      examStyle: true,
+      draftState,
+      usedOptionValues: { headings: ['I'] },
+      questionDisplayMap: { q14: '14' }
+    })
+
+    expect(wrapper.get('.dropzone-text').text()).toBe('i.Tried and tested solutions')
+    expect(wrapper.get('.native-option-chip').classes()).toContain('used')
+    expect(wrapper.get('.native-option-chip').attributes('style')).toContain('display: none')
+    expect(wrapper.find('.dropzone-clear').exists()).toBe(false)
+    expect(wrapper.get('.native-dropzone').attributes('aria-label')).toContain('Activate to remove answer')
+
+    await wrapper.get('.native-dropzone').trigger('click')
+    expect(wrapper.emitted('clear:dropzone')?.[0]).toEqual(['q14'])
+    await wrapper.setProps({ reusablePoolIds: ['headings'] })
+    expect(wrapper.get('.native-option-chip').attributes('style') || '').not.toContain('display: none')
   })
 })
 

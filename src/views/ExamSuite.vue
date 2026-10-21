@@ -7,8 +7,9 @@
   <div v-else-if="!prepared" class="suite-error" role="status">正在检查三篇文章与 40 道题目…</div>
   <ExamChrome v-else :phase="clock.phase" :remaining-seconds="clock.remainingSeconds" :duration-seconds="3600"
     exam-variant="suite" title="Academic Reading · Full test" :question-count="40" :answered-count="answeredCount"
+    :font-scale="fontScale"
     :ready="!!prepared" @confirm-details="clock.goToInstructions" @start="clock.start" @pause="clock.pause"
-    @resume="clock.resume" @submit="submitSuite" @back="backToSetup">
+    @resume="clock.resume" @submit="submitSuite" @back="backToSetup" @change-font-scale="setFontScale" @toggle-notes="toggleNotes">
     <div class="suite-body">
       <div v-if="passageError" class="suite-notice" role="alert">{{ passageError }} <button type="button" @click="retryPassages">Retry loading</button></div>
       <div v-if="saveError" class="suite-notice" role="alert">成绩尚未保存到本地记录，请保留此页面。<button type="button" @click="retrySave">重新保存</button></div>
@@ -23,21 +24,23 @@
         <div v-for="(exam, index) in prepared.passages" :key="`${attemptId}:${exam.examId}`" v-show="activePart === index" class="suite-passage" :aria-hidden="activePart !== index || undefined">
           <PracticeMode :ref="instance => setPassageRef(index, instance)" embedded :embedded-exam-id="exam.examId"
             :embedded-attempt-id="attemptId" :part-number="index + 1" :active="activePart === index"
+            :exam-pane-width="paneWidth" :exam-font-scale="fontScale" @update:exam-pane-width="setPaneWidth"
             @suite-state="state => onPassageState(index, state)" />
         </div>
+        <div v-if="!completed" class="suite-arrows"><button type="button" aria-label="Previous question" :disabled="activeNumber <= 1" @click="goToQuestion(activeNumber - 1)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H4m0 0 7-7m-7 7 7 7"/></svg></button><button type="button" aria-label="Next question" :disabled="activeNumber >= 40" @click="goToQuestion(activeNumber + 1)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16m0 0-7-7m7 7-7 7"/></svg></button></div>
       </div>
       <footer class="suite-navigation" aria-label="Full test question navigation">
-        <label class="suite-review"><input type="checkbox" :checked="activeMarked" :disabled="!allReady || !!completed" @change="toggleReview" />Review</label>
+
         <div ref="questionStrip" class="suite-question-strip">
-          <div v-for="(exam, index) in prepared.passages" :key="exam.examId" class="suite-nav-part">
-            <button type="button" class="part-label" :class="{ active: activePart === index }" @click="jumpToPart(index)">Part {{ index + 1 }}:</button>
-            <button v-for="item in exam.questionItems" :key="item.questionId" type="button" class="suite-question"
+          <div v-for="(exam, index) in prepared.passages" :key="exam.examId" class="suite-nav-part" :class="{ active: activePart === index }">
+            <button type="button" class="part-label" :class="{ active: activePart === index }" :aria-expanded="activePart === index" @click="jumpToPart(index)">Part {{ index + 1 }}</button>
+            <button v-if="activePart !== index" type="button" class="part-count" :aria-label="`Open Part ${index + 1}`" @click="jumpToPart(index)">{{ answeredCountForPart(index) }} of {{ exam.questionItems.length }}</button>
+            <button v-for="item in activePart === index ? exam.questionItems : []" :key="item.questionId" type="button" class="suite-question"
               :data-display-number="item.displayNumber" :class="questionClasses(index, item.questionId, Number(item.displayNumber))"
               :aria-label="`Question ${item.displayNumber}`" :aria-current="activeNumber === Number(item.displayNumber) ? 'step' : undefined"
               :title="questionTitle(index, item.questionId)" @click="goToQuestion(Number(item.displayNumber))">{{ item.displayNumber }}</button>
           </div>
         </div>
-        <div class="suite-arrows"><button type="button" aria-label="Previous question" :disabled="activeNumber <= 1" @click="goToQuestion(activeNumber - 1)">←</button><button type="button" aria-label="Next question" :disabled="activeNumber >= 40" @click="goToQuestion(activeNumber + 1)">→</button></div>
       </footer>
     </div>
   </ExamChrome>
@@ -53,6 +56,7 @@ import { useExamSuiteAttempt } from '@/composables/useExamSuiteAttempt'
 import { prepareSuite, buildSuiteAttempt } from '@/utils/examSuite'
 import type { SuitePassageHandle, SuitePassageState } from '@/types/examPassage'
 import type { ExamSuiteAttempt, PreparedExamSuite, SuitePassages, ExamSuitePassageResult } from '@/types/examSuite'
+import type { PracticeFontScale } from '@/types/readingNative'
 
 const route = useRoute()
 const router = useRouter()
@@ -68,9 +72,17 @@ const passageRefs: Array<SuitePassageHandle | null> = [null, null, null]
 const passageStates = ref<Array<SuitePassageState | null>>([null, null, null])
 const viewKey = `ielts_suite_view::${attemptId}`
 const activeNumber = ref(1)
+const lastNumbers = ref<[number, number, number]>([1, 14, 27])
+const paneWidth = ref(50)
+const fontScale = ref<PracticeFontScale>('medium')
 try {
   const saved = JSON.parse(sessionStorage.getItem(viewKey) || 'null')
-  if (saved?.ids?.join(',') === ids.join(',') && Number.isInteger(saved.number) && saved.number >= 1 && saved.number <= 40) activeNumber.value = saved.number
+  if (saved?.ids?.join(',') === ids.join(',')) {
+    if (Number.isInteger(saved.number) && saved.number >= 1 && saved.number <= 40) activeNumber.value = saved.number
+    if (Array.isArray(saved.lastNumbers) && saved.lastNumbers.length === 3 && saved.lastNumbers.every((number: number, index: number) => Number.isInteger(number) && number >= [1, 14, 27][index] && number <= [13, 26, 40][index])) lastNumbers.value = saved.lastNumbers
+    if (typeof saved.paneWidth === 'number' && saved.paneWidth >= 25 && saved.paneWidth <= 75) paneWidth.value = saved.paneWidth
+    if (['medium', 'large', 'extra-large'].includes(saved.fontScale)) fontScale.value = saved.fontScale
+  }
 } catch { /* A browser can disable storage; the current test remains usable. */ }
 const activePart = computed(() => activeNumber.value <= 13 ? 0 : activeNumber.value <= 26 ? 1 : 2)
 const allReady = computed(() => passageStates.value.every(state => state?.ready))
@@ -89,6 +101,11 @@ const activeItem = computed(() => prepared.value?.passages[activePart.value].que
 const activeMarked = computed(() => !!activeItem.value && !!passageStates.value[activePart.value]?.markedQuestions.includes(activeItem.value.questionId))
 
 function hasAnswer(value: string | string[]) { return Array.isArray(value) ? value.some(item => item.trim()) : !!String(value).trim() }
+function answeredCountForPart(index: number) { return Object.values(passageStates.value[index]?.answerMap || {}).filter(hasAnswer).length }
+function partForQuestion(number: number) { return number <= 13 ? 0 : number <= 26 ? 1 : 2 }
+function setPaneWidth(width: number) { paneWidth.value = Math.min(75, Math.max(25, width)) }
+function setFontScale(scale: PracticeFontScale) { fontScale.value = scale }
+function toggleNotes() { passageRefs[activePart.value]?.toggleNotes() }
 function formatDuration(seconds: number) { return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` }
 function setPassageRef(index: number, instance: unknown) { passageRefs[index] = instance as SuitePassageHandle | null }
 function onPassageState(index: number, state: SuitePassageState) {
@@ -115,7 +132,7 @@ async function goToQuestion(number: number) {
   if (item) await passageRefs[activePart.value]?.navigateToQuestion(item.questionId, item.anchorId)
   questionStrip.value?.querySelector(`[data-display-number="${number}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 }
-function jumpToPart(index: number) { void goToQuestion([1, 14, 27][index]) }
+function jumpToPart(index: number) { void goToQuestion(lastNumbers.value[index] || [1, 14, 27][index]) }
 function toggleReview() { if (activeItem.value) passageRefs[activePart.value]?.toggleReview(activeItem.value.questionId) }
 function backToSetup() { void router.push('/exam-setup') }
 async function retryPassages() { await Promise.all(passageRefs.map(part => part?.reload())) }
@@ -165,29 +182,43 @@ watch(allReady, async ready => {
   const item = activeItem.value
   if (item && activeNumber.value !== [1, 14, 27][activePart.value]) await goToQuestion(activeNumber.value)
 })
-watch(activeNumber, number => { try { sessionStorage.setItem(viewKey, JSON.stringify({ ids, number })) } catch { /* in-memory navigation remains available */ } })
+watch(activeNumber, number => { lastNumbers.value[partForQuestion(number)] = number })
+watch([activeNumber, lastNumbers, paneWidth, fontScale], () => {
+  try { sessionStorage.setItem(viewKey, JSON.stringify({ ids, number: activeNumber.value, lastNumbers: lastNumbers.value, paneWidth: paneWidth.value, fontScale: fontScale.value })) } catch { /* In-memory settings remain available. */ }
+}, { deep: true })
 onMounted(loadSuite)
 </script>
 
 <style scoped>
-.suite-body { height:100%; min-height:0; display:flex; flex-direction:column; font-family:Arial,Helvetica,sans-serif; color:#111; background:#dfe6f5; }
+.suite-body { height:100%; min-height:0; display:flex; flex-direction:column; font-family:"Helvetica Neue",Helvetica,Arial,sans-serif; color:#202020; background:#fff; }
 .suite-passages { flex:1; min-height:0; position:relative; }
 .suite-passage { height:100%; min-height:0; }
-.suite-navigation { flex:none; display:flex; align-items:center; gap:12px; padding:8px 28px; min-height:48px; box-sizing:border-box; background:#dfe6f5; }
-.suite-question-strip { display:flex; flex:1; min-width:0; overflow-x:auto; gap:18px; padding:4px 2px; scrollbar-width:thin; }
-.suite-nav-part { display:flex; align-items:center; flex-shrink:0; gap:5px; }
-.part-label { font:700 12px Arial,sans-serif; border:0; background:transparent; padding:4px; white-space:nowrap; cursor:pointer; color:#444; }
-.part-label.active { color:#111; }
-.suite-question { width:25px; height:26px; padding:0; border:0; border-radius:2px; background:#595959; color:#fff; font:700 13px Arial,sans-serif; position:relative; cursor:pointer; }
-.suite-question.current { background:#b3dcf5; color:#172e3e; outline:2px solid #87bde2; }
-.suite-question.answered::after { content:''; position:absolute; bottom:-3px; left:2px; right:2px; height:2px; background:#333; }
-.suite-question.marked { box-shadow:0 0 0 2px #de9700; }
-.suite-question.correct { background:#2e744b; color:#fff; }.suite-question.incorrect { background:#aa4242; color:#fff; }
-.suite-review { display:flex; flex-direction:column; align-items:center; font-size:10px; gap:2px; }.suite-review input { width:13px; height:13px; }
-.suite-arrows { display:flex; gap:8px; }.suite-arrows button { width:34px; height:34px; border:0; border-radius:50%; background:#eef1f8; font-size:27px; color:#555; cursor:pointer; }.suite-arrows button:disabled { opacity:.35; cursor:default; }
+.suite-navigation { flex:none; display:flex; align-items:center; gap:16px; padding:5px 40px; min-height:74px; box-sizing:border-box; background:#fff; border-top:0; }
+.suite-question-strip { display:flex; flex:1; align-items:center; justify-content:space-between; min-width:0; overflow-x:auto; gap:18px; padding:16px 2px 0; scrollbar-width:thin; }
+.suite-nav-part { display:flex; align-items:center; flex-shrink:0; gap:4px; white-space:nowrap; }
+.suite-nav-part.active { flex:0 1 auto; }
+.part-label { font:400 16px "Helvetica Neue",Helvetica,Arial,sans-serif; border:0; background:transparent; padding:4px 6px; white-space:nowrap; cursor:pointer; color:#333; }
+.part-label.active { position:relative; min-width:100px; font-weight:400; color:#111; }
+.part-label.active::before { content:""; position:absolute; top:-15px; left:0; right:4px; height:3px; background:#eee; }
+.part-count { padding:4px 6px; border:0; background:transparent; font:400 16px "Helvetica Neue",Helvetica,Arial,sans-serif; color:#202020; cursor:pointer; }
+.suite-question { width:28px; height:31px; padding:0; border:0; border-radius:0; background:#fff; color:#202020; font:400 16px "Helvetica Neue",Helvetica,Arial,sans-serif; position:relative; cursor:pointer; }
+.suite-question.current { background:#fff; color:#111; outline:2px solid #57a7ec; outline-offset:-2px; }
+.suite-question::before { content:""; position:absolute; top:-14px; left:0; right:0; height:3px; background:#eee; }
+.suite-question.answered::before { background:#509d00; }
+.suite-question.marked::after { content:''; position:absolute; right:1px; bottom:0; width:5px; height:5px; border-radius:50%; background:#bf8c2d; }
+.suite-question.correct { background:#dceede; color:#174323; }.suite-question.incorrect { background:#f8e0e0; color:#6f2424; }
+.suite-review { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0; min-width:44px; padding:2px; border:0; background:#fff; color:#555; font:11px Arial,sans-serif; cursor:pointer; }
+.suite-review svg { width:20px; height:20px; }
+.suite-review.marked { color:#9a680e; }
+.suite-review:disabled { opacity:.5; cursor:default; }
+.suite-arrows { position:absolute; z-index:10; right:40px; bottom:40px; display:flex; gap:5px; }
+.suite-arrows button { width:50px; height:50px; border:0; border-radius:3px; background:#383838; font-size:29px; line-height:1; color:#fff; cursor:pointer; }
+.suite-arrows button svg { width:32px; height:32px; vertical-align:middle; }
+.suite-arrows button:disabled { background:#e6e6e6; color:#fff; cursor:default; }
+.suite-arrows button:not(:disabled):hover, .suite-arrows button:not(:disabled):focus-visible { background:#202020; outline:2px solid #5aa4e5; outline-offset:2px; }
 .suite-result { display:flex; align-items:center; flex-wrap:wrap; gap:18px; padding:10px 28px; background:#f4f7fb; border-bottom:1px solid #bac7d6; }.suite-result strong { font-size:23px; margin-right:12px; }.suite-result span { font-size:13px; }.part-results { display:flex; gap:8px; margin-left:auto; }
 .suite-result button,.suite-notice button,.suite-error button { padding:7px 12px; border:1px solid #b3bfcd; border-radius:3px; background:#fff; color:#222; cursor:pointer; }
 .suite-notice { padding:8px 28px; background:#fff1cf; font-size:13px; }.suite-error { padding:60px; max-width:900px; margin:auto; font-family:Arial,sans-serif; }.suite-error button { margin-right:12px; }
 button:focus-visible { outline:2px solid #397fbc; outline-offset:2px; }
-@media(max-width:800px) { .suite-navigation { padding:8px; gap:6px; }.suite-result { padding:8px; gap:8px; }.suite-result span { display:block; }.part-results { margin-left:0; }.suite-nav-part { gap:4px; } }
+@media(max-width:900px) { .suite-navigation { padding:6px 12px; gap:6px; }.suite-question-strip { justify-content:flex-start; }.suite-arrows { right:22px; bottom:18px; }.suite-result { padding:8px; gap:8px; }.suite-result span { display:block; }.part-results { margin-left:0; }.suite-nav-part { gap:3px; } }
 </style>

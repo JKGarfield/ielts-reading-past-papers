@@ -1,10 +1,11 @@
 <template>
   <component :is="isExamInterface && !embedded ? ExamChrome : 'div'" :class="{ 'embedded-passage': embedded }" :phase="clock.phase" :remaining-seconds="clock.remainingSeconds"
     :ready="clockReady" :question-count="session.exam?.questionOrder.length || 0" :title="displayTitle" :answered-count="answeredCount"
+    :font-scale="session.fontScale"
     @confirm-details="clock.goToInstructions" @start="clock.start" @pause="clock.pause" @resume="clock.resume"
-    @submit="submitPractice" @back="goBack">
+    @submit="submitPractice" @back="goBack" @change-font-scale="setExamFontScale" @toggle-notes="toggleNotes">
   <div class="practice-mode-page" :class="{ 'exam-mode': isExamInterface }" @focusin="handleExamFocus" @click="handleExamFocus">
-    <div v-if="isExamInterface" class="exam-part-strip"><h1>{{ embedded ? `Part ${partNumber}` : 'Reading passage' }}</h1><p>Read the text below and answer questions {{ examQuestionRange }}.</p></div>
+    <div v-if="isExamInterface" class="exam-part-strip"><h1>PART {{ examPartNumber }}</h1><p>Questions {{ examQuestionRange }}</p></div>
     <div v-if="!isExamInterface" class="page-header">
       <div class="header-left">
         <button class="icon-btn" type="button" @click="goBack">
@@ -69,7 +70,7 @@
               @contextmenu="handleExamContextMenu($event, 'passage')"
               @scroll="handlePaneScroll('passage')"
             >
-              <div class="pane-header">
+              <div v-if="!isExamInterface || !hasSourceArticleTitle" class="pane-header">
                 <div>
                   <h2>{{ session.exam.meta.title }}</h2>
                 </div>
@@ -79,7 +80,7 @@
               </div>
 
               <div class="pane-content passage-content">
-                <PracticeNodeRenderer :exam-style="isExamInterface" :question-display-map="session.exam?.questionDisplayMap"
+                <PracticeNodeRenderer :exam-style="isExamInterface" :show-all-choices="isExamInterface" :question-display-map="session.exam?.questionDisplayMap"
                   :nodes="passageNodesForDisplay"
                   scope="passage"
                   :draft-state="session.draftState"
@@ -88,6 +89,9 @@
                   :selected-option-key="session.selectedOptionKey"
                   :highlights="passageHighlights"
                   :used-option-values="session.usedOptionValuesByPool"
+                  :reusable-pool-ids="session.reusablePoolIds"
+                  :marked-questions="session.markedQuestions"
+                  :active-question-id="activeQuestionId"
                   node-path-prefix="1000"
                   @update:text="session.setTextAnswer"
                   @update:textarea="session.setTextareaAnswer"
@@ -96,18 +100,29 @@
                   @select:option="handleOptionSelection"
                   @set:dropzone="handleDropzoneSet"
                   @clear:dropzone="session.clearDropzoneValue"
+                  @toggle:review="session.toggleMarkedQuestion"
                   @open:note="openExistingNoteModal"
                   @open:highlight="openExistingHighlightToolbar"
                 />
               </div>
             </section>
 
-            <div 
-              class="pane-resizer" 
-              @mousedown="startResize"
+            <div
+              v-if="isExamInterface || !embedded"
+              class="pane-resizer"
+              :class="{ resizing: isResizing }"
+              role="separator"
+              tabindex="0"
+              aria-label="Resize passage and questions"
+              aria-orientation="vertical"
+              :aria-valuenow="Math.round(leftPaneWidth)"
+              aria-valuemin="25"
+              aria-valuemax="75"
+              @pointerdown="startResize"
+              @keydown="handleResizerKeydown"
               @dblclick="resetResize"
             >
-              <span class="material-icons resizer-icon">drag_handle</span>
+              <span class="resizer-icon" aria-hidden="true">↔</span>
             </div>
 
             <section
@@ -172,9 +187,9 @@
                   :id="`${domPrefix}group-${group.groupId}`"
                   :data-question-ids="group.questionIds?.join(' ') || ''"
                 >
-                  <PracticeNodeRenderer :exam-style="isExamInterface" :question-display-map="session.exam?.questionDisplayMap"
+                  <PracticeNodeRenderer :exam-style="isExamInterface" :show-all-choices="isExamInterface" :question-display-map="session.exam?.questionDisplayMap"
                     v-if="group.leadNodes.length"
-                    :nodes="group.leadNodes"
+                    :nodes="questionLeadNodesForDisplay(group.leadNodes)"
                     scope="questions"
                     :draft-state="session.draftState"
                     :submitted="session.submitted"
@@ -182,6 +197,9 @@
                     :selected-option-key="session.selectedOptionKey"
                     :highlights="questionHighlights"
                     :used-option-values="session.usedOptionValuesByPool"
+                  :reusable-pool-ids="session.reusablePoolIds"
+                    :marked-questions="session.markedQuestions"
+                  :active-question-id="activeQuestionId"
                     :node-path-prefix="`2000.${groupIndex}.0`"
                     @update:text="session.setTextAnswer"
                     @update:textarea="session.setTextareaAnswer"
@@ -190,10 +208,11 @@
                     @select:option="handleOptionSelection"
                     @set:dropzone="handleDropzoneSet"
                     @clear:dropzone="session.clearDropzoneValue"
+                    @toggle:review="session.toggleMarkedQuestion"
                     @open:note="openExistingNoteModal"
                     @open:highlight="openExistingHighlightToolbar"
                   />
-                  <PracticeNodeRenderer :exam-style="isExamInterface" :question-display-map="session.exam?.questionDisplayMap"
+                  <PracticeNodeRenderer :exam-style="isExamInterface" :show-all-choices="isExamInterface" :question-display-map="session.exam?.questionDisplayMap"
                     :nodes="group.contentNodes"
                     scope="questions"
                     :draft-state="session.draftState"
@@ -202,6 +221,9 @@
                     :selected-option-key="session.selectedOptionKey"
                     :highlights="questionHighlights"
                     :used-option-values="session.usedOptionValuesByPool"
+                  :reusable-pool-ids="session.reusablePoolIds"
+                    :marked-questions="session.markedQuestions"
+                  :active-question-id="activeQuestionId"
                     :node-path-prefix="`2000.${groupIndex}.1`"
                     @update:text="session.setTextAnswer"
                     @update:textarea="session.setTextareaAnswer"
@@ -210,6 +232,7 @@
                     @select:option="handleOptionSelection"
                     @set:dropzone="handleDropzoneSet"
                     @clear:dropzone="session.clearDropzoneValue"
+                    @toggle:review="session.toggleMarkedQuestion"
                     @open:note="openExistingNoteModal"
                     @open:highlight="openExistingHighlightToolbar"
                   />
@@ -251,6 +274,14 @@
                   </article>
                 </section>
               </div>
+
+              <button v-if="isExamInterface && reviewMarkerTop !== null && !session.submitted" type="button"
+                class="exam-question-review" :class="{ marked: isMarked(activeQuestionId) }"
+                :style="{ top: `${reviewMarkerTop}px` }" :aria-pressed="isMarked(activeQuestionId)"
+                :aria-label="`${isMarked(activeQuestionId) ? 'Remove review mark from' : 'Mark'} question ${activeQuestionNumber}${isMarked(activeQuestionId) ? '' : ' for review'}`"
+                @click="session.toggleMarkedQuestion(activeQuestionId)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" :fill="isMarked(activeQuestionId) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.7"><path d="M5 3.5h14v17l-7-4.5-7 4.5z"/></svg>
+              </button>
             </section>
 
             <aside v-if="session.notesOpen" class="notes-panel">
@@ -259,21 +290,23 @@
                   <p class="pane-kicker">Session Notes</p>
                   <h3>Scratchpad</h3>
                 </div>
-                <button class="icon-btn small" type="button" @click="session.notesOpen = false">
+                <button class="icon-btn small" type="button" aria-label="Close notes" @click="session.notesOpen = false">
                   <span class="material-icons">close</span>
                 </button>
               </div>
               <textarea
                 v-model="session.notesText"
                 class="notes-textarea"
+                aria-label="Session notes"
                 placeholder="Write quick clues, paragraph links, or elimination notes here..."
               ></textarea>
             </aside>
           </div>
 
+          <div v-if="!embedded && isExamInterface" class="exam-arrows"><button type="button" aria-label="Previous question" :disabled="activeQuestionId === session.exam?.questionItems[0]?.questionId" @click="moveExamQuestion(-1)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H4m0 0 7-7m-7 7 7 7"/></svg></button><button type="button" aria-label="Next question" :disabled="activeQuestionId === session.exam?.questionItems[session.exam.questionItems.length - 1]?.questionId" @click="moveExamQuestion(1)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16m0 0-7-7m7 7-7 7"/></svg></button></div>
+
           <div v-if="!embedded" class="nav-shell">
-            <label v-if="isExamInterface" class="exam-review-toggle"><input type="checkbox" :checked="session.markedQuestions.includes(activeQuestionId)" :disabled="session.submitted" @change="session.toggleMarkedQuestion(activeQuestionId)" /> Review</label>
-            <h3 class="nav-title">{{ isExamInterface ? 'Passage:' : 'Question' }}</h3>
+            <h3 class="nav-title">{{ isExamInterface ? `Part ${examPartNumber}` : 'Question' }}</h3>
             <div class="nav-grid">
               <button type="button"
                 v-for="item in session.exam?.questionItems"
@@ -286,7 +319,6 @@
                 <span class="nav-jump">{{ item.displayNumber }}</span>
               </button>
             </div>
-            <div v-if="isExamInterface" class="exam-arrows"><button aria-label="Previous question" @click="moveExamQuestion(-1)">←</button><button aria-label="Next question" @click="moveExamQuestion(1)">→</button></div>
             <div v-if="!session.reviewMode && !isExamInterface" class="bottom-actions">
               <button class="footer-btn" type="button" @click="session.reset()">Reset</button>
               <button class="footer-btn primary" type="button" @click="submitPractice">Submit</button>
@@ -437,8 +469,8 @@ interface NoteModalState {
   record: PracticeHighlightRecord | null
 }
 
-const props = withDefaults(defineProps<{ embedded?: boolean; embeddedExamId?: string; embeddedAttemptId?: string; partNumber?: number; active?: boolean }>(), { embedded: false, partNumber: 1, active: true })
-const emit = defineEmits<{ (event: 'suite-state', state: SuitePassageState): void }>()
+const props = withDefaults(defineProps<{ embedded?: boolean; embeddedExamId?: string; embeddedAttemptId?: string; partNumber?: number; active?: boolean; examPaneWidth?: number; examFontScale?: PracticeFontScale }>(), { embedded: false, partNumber: 1, active: true })
+const emit = defineEmits<{ (event: 'suite-state', state: SuitePassageState): void; (event: 'update:exam-pane-width', width: number): void }>()
 const domPrefix = computed(() => props.embedded ? `suite-part-${props.partNumber}-` : '')
 provide('practice-dom-prefix', domPrefix)
 const route = useRoute()
@@ -475,6 +507,15 @@ const sessionState = useReadingPracticeSession({
   suiteSessionId
 })
 const session = proxyRefs(sessionState)
+
+const singleViewKey = !props.embedded && isExamInterface.value ? `ielts_exam_view::${suiteSessionId.value}` : ''
+let storedSingleView: { paneWidth?: number; fontScale?: PracticeFontScale } | null = null
+if (singleViewKey) {
+  try { storedSingleView = JSON.parse(sessionStorage.getItem(singleViewKey) || 'null') } catch { /* Keep the default layout. */ }
+}
+if (storedSingleView?.fontScale && ['medium', 'large', 'extra-large'].includes(storedSingleView.fontScale)) {
+  sessionState.fontScale.value = storedSingleView.fontScale
+}
 
 const question = computed(() => questionStore.getQuestionById(questionId.value) ?? null)
 const displayLang = computed<'zh' | 'en'>(() => (currentLang.value === 'en' ? 'en' : 'zh'))
@@ -523,9 +564,14 @@ const noteModal = ref<NoteModalState>({
 })
 
 // 拖拽调整宽度相关
-const leftPaneWidth = ref(isExamInterface.value ? 60 : 50)
+const leftPaneWidth = ref(props.examPaneWidth ?? (Number.isFinite(storedSingleView?.paneWidth) ? Number(storedSingleView?.paneWidth) : 50))
 const isResizing = ref(false)
-const resizerLayoutRef = ref<HTMLElement | null>(null)
+watch(() => props.examPaneWidth, width => { if (typeof width === 'number' && !isResizing.value) leftPaneWidth.value = width })
+watch(() => props.examFontScale, scale => { if (scale && props.embedded) sessionState.fontScale.value = scale }, { immediate: true })
+watch([leftPaneWidth, sessionState.fontScale], () => {
+  if (!singleViewKey) return
+  try { sessionStorage.setItem(singleViewKey, JSON.stringify({ paneWidth: leftPaneWidth.value, fontScale: sessionState.fontScale.value })) } catch { /* Keep the layout in memory. */ }
+})
 
 const clockReady = computed(() => !props.embedded && isExamInterface.value && !!sessionState.exam.value && !sessionState.isLoading.value)
 const clock = proxyRefs(useExamClock({
@@ -538,6 +584,25 @@ const examQuestionRange = computed(() => {
   return items.length ? `${items[0].displayNumber}–${items[items.length - 1].displayNumber}` : '…'
 })
 const activeQuestionId = computed(() => sessionState.exam.value?.questionItems.find(item => questionLabel(item.questionId) === activeQuestionNumber.value)?.questionId || '')
+const reviewMarkerTop = ref<number | null>(null)
+function updateReviewMarker() {
+  const pane = questionPane.value
+  const control = pane?.querySelector<HTMLElement>(`[data-question="${CSS.escape(activeQuestionId.value)}"]`)
+  if (!isExamInterface.value || !pane || !control || (props.embedded && !props.active)) {
+    reviewMarkerTop.value = null
+    return
+  }
+  const row = control.closest('tr')
+  const question = control.closest('.question-item, .tfng-item, .tfng-question, .mc-question-item, .exam-matching-item')
+  const anchor = row || question?.querySelector('p') || control
+  const rect = anchor.getBoundingClientRect()
+  reviewMarkerTop.value = Math.max(0, rect.top - pane.getBoundingClientRect().top + pane.scrollTop + (row ? rect.height / 2 - 12 : 0))
+}
+watch([activeQuestionId, leftPaneWidth, sessionState.fontScale, sessionState.notesOpen, sessionState.answerMap, () => props.active], async () => {
+  await nextTick()
+  updateReviewMarker()
+}, { flush: 'post' })
+
 function openExam() {
   void router.push({ path: '/exam', query: { id: questionId.value, suiteSessionId: crypto.randomUUID() } })
 }
@@ -553,6 +618,8 @@ function moveExamQuestion(direction: number) {
   const item = items[Math.max(0, Math.min(items.length - 1, index + direction))]
   if (item) void scrollToQuestion(item.questionId, item.anchorId)
 }
+function setExamFontScale(scale: PracticeFontScale) { sessionState.fontScale.value = scale }
+function toggleNotes() { sessionState.notesOpen.value = !sessionState.notesOpen.value }
 watch(clockReady, ready => {
   if (!ready || clock.phase !== 'submitted' || sessionState.submitted.value) return
   const record = practiceStore.records.find(item => item.id === suiteSessionId.value)
@@ -569,6 +636,7 @@ watch(clockReady, ready => {
 })
 
 const passageNodes = computed(() => sessionState.exam.value?.passageBlocks.flatMap((block) => block.nodes) || [])
+const examPartNumber = computed(() => props.embedded ? props.partNumber : Number(sessionState.exam.value?.meta.category?.match(/P([123])/)?.[1] || 1))
 
 /** Flatten text from an AST node (for matching duplicate headings). */
 function flattenAstText(node: ReadingAstNode): string {
@@ -614,6 +682,13 @@ const passageNodesForDisplay = computed(() => {
   const nodes = stripDuplicatePassageArticleHeading(passageNodes.value, sessionState.exam.value?.meta.title)
   return isExamInterface.value ? annotateExamIntro(nodes) : nodes
 })
+const hasSourceArticleTitle = computed(() => passageNodesForDisplay.value.some(node =>
+  node.type === 'element' && ['h1', 'h2', 'h3'].includes(node.tag) && !node.attrs.class?.includes('exam-source-intro')
+))
+function questionLeadNodesForDisplay(nodes: ReadingAstNode[]): ReadingAstNode[] {
+  if (!isExamInterface.value) return nodes
+  return nodes.filter(node => !(node.type === 'element' && /^h[2-4]$/.test(node.tag) && flattenAstText(node).trim() === 'Questions'))
+}
 const passageHighlights = computed(() => (sessionState.highlights.value || []).filter((item) => item.scope === 'passage'))
 const questionHighlights = computed(() => (sessionState.highlights.value || []).filter((item) => item.scope === 'questions'))
 const answeredCount = computed(() => Object.values(sessionState.answerMap.value || {}).filter((value) => hasAnswerValue(value)).length)
@@ -826,129 +901,44 @@ function isMarked(questionIdValue: string) {
   return (sessionState.markedQuestions.value || []).includes(questionIdValue)
 }
 
+let navigationRequest = 0
 async function scrollToQuestion(questionId: string, anchorId: string) {
+  const request = ++navigationRequest
   await nextTick()
+  if (request !== navigationRequest || !questionPane.value) return
 
-  const questionPaneEl = questionPane.value
-  const passagePaneEl = passagePane.value
-
-  console.log('[scrollToQuestion] called:', { questionId, anchorId, questionPaneEl, passagePaneEl })
-
-  if (!questionPaneEl) {
-    console.error('[scrollToQuestion] questionPane is not ready')
-    return
-  }
-
-  if (!anchorId) {
-    console.warn('[scrollToQuestion] anchorId is missing, using questionId as fallback')
-    anchorId = questionId
-  }
-
-  // Update active question number for assistant quick actions
   updateActiveQuestionNumber(questionLabel(questionId))
-
+  const panes = [passagePane.value, questionPane.value].filter((pane): pane is HTMLElement => Boolean(pane))
   let element: HTMLElement | null = null
-  let targetPane: HTMLElement | null = questionPaneEl
-
-  // Priority 1: exact anchorId match in passage pane
-  if (passagePaneEl && anchorId) {
-    try {
-      const escapedId = CSS.escape(domPrefix.value + anchorId)
-      element = passagePaneEl.querySelector(`#${escapedId}`) as HTMLElement | null
-      console.log('[scrollToQuestion] Priority 1 result:', { anchorId, escapedId, found: !!element })
-      if (element) {
-        targetPane = passagePaneEl
-      }
-    } catch (e) {
-      console.error('[scrollToQuestion] Priority 1 error:', e)
-    }
+  let targetPane: HTMLElement | null = null
+  // A shared group anchor must never focus the first question in that group.
+  for (const pane of panes) {
+    element = pane.querySelector<HTMLElement>(`[data-question="${CSS.escape(questionId)}"]`)
+    if (element) { targetPane = pane; break }
   }
-
-  // Priority 2: exact anchorId match in question pane
-  if (!element && anchorId) {
-    try {
-      const escapedId = CSS.escape(domPrefix.value + anchorId)
-      element = questionPaneEl.querySelector(`#${escapedId}`) as HTMLElement | null
-      console.log('[scrollToQuestion] Priority 2 result:', { anchorId, escapedId, found: !!element })
-    } catch (e) {
-      console.error('[scrollToQuestion] Priority 2 error:', e)
-    }
-  }
-
-  // Priority 3: exact data-question match (search both panes)
-  if (!element && questionId) {
-    element = questionPaneEl.querySelector(`[data-question="${questionId}"]`) as HTMLElement | null
-    console.log('[scrollToQuestion] Priority 3 question pane:', { questionId, found: !!element })
-    if (!element && passagePaneEl) {
-      element = passagePaneEl.querySelector(`[data-question="${questionId}"]`) as HTMLElement | null
-      console.log('[scrollToQuestion] Priority 3 passage pane:', { questionId, found: !!element })
-      if (element) targetPane = passagePaneEl
-    }
-  }
-
-  // Priority 4: shared group container fallback
-  if (!element && questionId) {
-    const groupContainers = questionPaneEl.querySelectorAll('.question-group-card[data-question-ids]')
-    console.log('[scrollToQuestion] Priority 4 group containers:', { count: groupContainers.length })
-    for (const container of groupContainers) {
-      const questionIds = (container.getAttribute('data-question-ids') || '').split(' ')
-      if (questionIds.includes(questionId)) {
-        element = container as HTMLElement
-        console.log('[scrollToQuestion] Priority 4 found group:', { questionId, groupId: container.id })
-        break
-      }
-    }
-  }
-
-  // Priority 5: exact id match variants (search both panes)
-  if (!element && questionId) {
-    const exactIds = [
-      questionId,
-      `${questionId}_input`,
-      `${questionId}_select`,
-      `${questionId}_textarea`,
-      `${questionId}_group`
-    ]
-    for (const candidateId of exactIds) {
-      try {
-        const escapedId = CSS.escape(domPrefix.value + candidateId)
-        element = questionPaneEl.querySelector(`#${escapedId}`) as HTMLElement | null
-        console.log('[scrollToQuestion] Priority 5 check:', { candidateId, found: !!element })
-        if (element) break
-        if (passagePaneEl) {
-          element = passagePaneEl.querySelector(`#${escapedId}`) as HTMLElement | null
-          if (element) {
-            targetPane = passagePaneEl
-            break
-          }
-        }
-      } catch (e) {
-        console.error('[scrollToQuestion] Priority 5 error:', e)
-      }
-    }
-  }
-
   if (!element) {
-    // Debug: log available IDs in question pane
-    const allIds = Array.from(questionPaneEl.querySelectorAll('[id]')).map(el => el.id)
-    console.error(`[scrollToQuestion] No target found for ${questionId} (anchor: ${anchorId}). Available IDs:`, allIds.slice(0, 20))
-    return
+    for (const pane of panes) {
+      element = anchorId ? pane.querySelector<HTMLElement>(`#${CSS.escape(domPrefix.value + anchorId)}`) : null
+      if (element) { targetPane = pane; break }
+    }
   }
+  if (!element) {
+    element = Array.from(questionPane.value.querySelectorAll<HTMLElement>('.question-group-card[data-question-ids]'))
+      .find(group => group.dataset.questionIds?.split(' ').includes(questionId)) || null
+    targetPane = questionPane.value
+  }
+  if (!element || !targetPane) return
 
   if (isExamInterface.value) {
     const details = element.closest('details') || element.querySelector('details')
     if (details) details.open = true
-    const control = element.matches('input, select, textarea, [role="button"]') ? element : element.querySelector<HTMLElement>('input, select, textarea, [role="button"]')
+    const control = element.matches('input, select, textarea, [role="button"]')
+      ? element : element.querySelector<HTMLElement>(`[data-question="${CSS.escape(questionId)}"]`)
     control?.focus({ preventScroll: true })
   }
-  // Manual scroll calculation for precise control over which pane scrolls
   const paneRect = targetPane.getBoundingClientRect()
-  const elementRect = element.getBoundingClientRect()
-  const relativeTop = elementRect.top - paneRect.top + targetPane.scrollTop - paneRect.height / 2 + elementRect.height / 2
-
-  // Use scrollTop for better compatibility
-  targetPane.scrollTop = Math.max(0, relativeTop)
-  console.log('[scrollToQuestion] Scrolled to element:', element.id || element.className)
+  const targetRect = (element.closest('tr') || element).getBoundingClientRect()
+  targetPane.scrollTop = Math.max(0, targetRect.top - paneRect.top + targetPane.scrollTop - paneRect.height / 2 + targetRect.height / 2)
 }
 
 function handleOptionSelection(node: { poolId: string; value: string }) {
@@ -966,6 +956,7 @@ function handleDropzoneSet(payload: { questionId: string; poolId: string; value:
     value: payload.value,
     label: matchedOption?.label || payload.label || payload.value
   })
+  if (isExamInterface.value) updateActiveQuestionNumber(questionLabel(payload.questionId))
 }
 
 function clearSelections() {
@@ -1216,24 +1207,32 @@ watch(
 )
 
 // 拖拽调整宽度函数
-function startResize(event: MouseEvent) {
+function startResize(event: PointerEvent) {
+  if (event.pointerType === 'mouse' && event.button !== 0) return
   event.preventDefault()
   isResizing.value = true
-  document.addEventListener('mousemove', handleResize)
-  document.addEventListener('mouseup', stopResize)
+  document.addEventListener('pointermove', handleResize)
+  document.addEventListener('pointerup', stopResize)
+  document.addEventListener('pointercancel', stopResize)
   document.body.style.cursor = 'col-resize'
   document.body.style.userSelect = 'none'
 }
 
 function stopResize() {
   isResizing.value = false
-  document.removeEventListener('mousemove', handleResize)
-  document.removeEventListener('mouseup', stopResize)
+  document.removeEventListener('pointermove', handleResize)
+  document.removeEventListener('pointerup', stopResize)
+  document.removeEventListener('pointercancel', stopResize)
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
 }
 
-function handleResize(event: MouseEvent) {
+function setPaneWidth(width: number) {
+  leftPaneWidth.value = Math.min(75, Math.max(25, width))
+  if (props.embedded) emit('update:exam-pane-width', leftPaneWidth.value)
+}
+
+function handleResize(event: PointerEvent) {
   if (!isResizing.value || !contentWrapper.value) return
   
   const container = contentWrapper.value
@@ -1241,11 +1240,20 @@ function handleResize(event: MouseEvent) {
   const newWidth = ((event.clientX - containerRect.left) / containerRect.width) * 100
   
   // 限制最小和最大宽度
-  leftPaneWidth.value = Math.min(75, Math.max(25, newWidth))
+  setPaneWidth(newWidth)
 }
 
 function resetResize() {
-  leftPaneWidth.value = isExamInterface.value ? 60 : 50
+  setPaneWidth(50)
+}
+
+function handleResizerKeydown(event: KeyboardEvent) {
+  const step = event.shiftKey ? 10 : 5
+  if (event.key === 'ArrowLeft') setPaneWidth(leftPaneWidth.value - step)
+  else if (event.key === 'ArrowRight') setPaneWidth(leftPaneWidth.value + step)
+  else if (event.key === 'Home') resetResize()
+  else return
+  event.preventDefault()
 }
 
 function dismissExamSelection(event: PointerEvent | KeyboardEvent) {
@@ -1259,6 +1267,7 @@ function dismissExamSelection(event: PointerEvent | KeyboardEvent) {
   closeSelectionToolbar()
 }
 onMounted(() => {
+  window.addEventListener('resize', updateReviewMarker)
   document.addEventListener('fullscreenchange', handleFullscreenChange)
   document.addEventListener('pointerdown', dismissExamSelection)
   document.addEventListener('keydown', dismissExamSelection)
@@ -1266,6 +1275,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopResize()
+  window.removeEventListener('resize', updateReviewMarker)
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
   document.removeEventListener('pointerdown', dismissExamSelection)
   document.removeEventListener('keydown', dismissExamSelection)
@@ -1299,6 +1309,7 @@ const suiteHandle: SuitePassageHandle = {
   clearSuiteDraft: sessionState.clearSimulationDraft,
   navigateToQuestion: scrollToQuestion,
   toggleReview: sessionState.toggleMarkedQuestion,
+  toggleNotes,
   reload: sessionState.reload
 }
 defineExpose(suiteHandle)

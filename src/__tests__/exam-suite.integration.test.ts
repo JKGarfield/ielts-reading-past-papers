@@ -17,11 +17,11 @@ const clockKey = `ielts_suite_clock::${attemptId}::${ids.join(',')}`
 const draftKeys = ids.map(examId => getSimulationDraftStorageKey({ examId, mode: 'simulation', suiteSessionId: attemptId }))
 const wrappers: VueWrapper[] = []
 
-async function mountSuite(realRenderer = false) {
+async function mountSuite(realRenderer = false, passageIds = ids) {
   const pinia = createPinia()
   setActivePinia(pinia)
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/exam-suite', component: ExamSuite }] })
-  await router.push({ path: '/exam-suite', query: { passages: ids.join(','), attemptId } })
+  await router.push({ path: '/exam-suite', query: { passages: passageIds.join(','), attemptId } })
   await router.isReady()
   const wrapper = mount(ExamSuite, { attachTo: document.body, global: { plugins: [pinia, router], provide: { currentLang: ref('en'), t: (key: string) => key }, stubs: { PracticeAssistant: true, PracticeNodeRenderer: !realRenderer } } })
   wrappers.push(wrapper)
@@ -46,6 +46,21 @@ beforeEach(() => { localStorage.clear(); sessionStorage.clear(); vi.spyOn(Elemen
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.restoreAllMocks() })
 
 describe('full suite with three real reading sessions', () => {
+  it('focuses and answers the requested table row instead of the shared group first row', async () => {
+    const wrapper = await mountSuite(true, ['p1-low-67', 'p2-low-75', 'p3-low-71'])
+    await start(wrapper)
+    await wrapper.get('[data-display-number="4"]').trigger('click')
+    await nextTick()
+    expect(document.activeElement?.getAttribute('data-question')).toBe('q4')
+    expect(wrapper.get('[data-display-number="4"]').attributes('aria-current')).toBe('step')
+    const control = wrapper.get('.suite-passage:not([aria-hidden]) input[data-question="q4"]')
+    await control.setValue(true)
+    expect(handles(wrapper)[0].getState().answerMap.q4).toBe(control.attributes('value'))
+    expect(handles(wrapper)[0].getState().answerMap.q1).toBe('')
+    await wrapper.get('.exam-question-review').trigger('click')
+    expect(handles(wrapper)[0].getState().markedQuestions).toContain('q4')
+  })
+
   it('shows 60 minutes and 40 questions, isolates local q1 answers and saves one full result', async () => {
     const wrapper = await mountSuite()
     await vi.waitFor(() => expect(wrapper.text()).toContain('60 minutes left'))
@@ -54,18 +69,21 @@ describe('full suite with three real reading sessions', () => {
     await wrapper.get('.instruction-actions .primary-button').trigger('click')
     await ready(wrapper)
     const children = wrapper.findAllComponents(PracticeMode)
-    children[0].findComponent(PracticeNodeRenderer).vm.$emit('set:dropzone', { questionId: 'q1', poolId: 'headings', value: 'i', label: 'i' })
+    children[0].findComponent(PracticeNodeRenderer).vm.$emit('set:dropzone', { questionId: 'q1', poolId: 'practice-pool-1', value: 'i', label: 'i' })
     children[1].findComponent(PracticeNodeRenderer).vm.$emit('toggle:choice', { fieldName: 'q1_2', inputType: 'checkbox', value: 'B', checked: true })
-    children[2].findComponent(PracticeNodeRenderer).vm.$emit('set:dropzone', { questionId: 'q1', poolId: 'headings', value: 'iii', label: 'iii' })
+    children[2].findComponent(PracticeNodeRenderer).vm.$emit('set:dropzone', { questionId: 'q1', poolId: 'word-options', value: 'A', label: 'A form and function' })
     await nextTick()
     // Renderer events must reach each actual useReadingPracticeSession instance.
-    expect(handles(wrapper).map(child => child.getState().answerMap.q1)).toEqual(['I', 'B', 'iii'])
+    expect(handles(wrapper).map(child => child.getState().answerMap.q1)).toEqual(['I', 'B', 'A'])
+    expect(wrapper.find('[data-display-number="27"]').exists()).toBe(false)
+    await wrapper.get('.suite-nav-part:nth-child(3) .part-label').trigger('click')
     await wrapper.get('[data-display-number="27"]').trigger('click')
     expect(wrapper.get('[data-display-number="27"]').attributes('aria-current')).toBe('step')
+    expect(wrapper.find('[data-display-number="1"]').exists()).toBe(false)
     await submit(wrapper)
     expect(history()).toHaveLength(1)
     expect(history()[0].totalQuestions).toBe(40)
-    expect(history()[0].passages.map((part: any) => part.result.answers.q1)).toEqual(['I', 'B', 'iii'])
+    expect(history()[0].passages.map((part: any) => part.result.answers.q1)).toEqual(['I', 'B', 'A'])
     expect(handles(wrapper).every(child => child.getState().submitted)).toBe(true)
     await nextTick()
     expect(history()).toHaveLength(1)
@@ -81,6 +99,7 @@ describe('full suite with three real reading sessions', () => {
   it('keeps the newest target when navigating rapidly across 26 → 27', async () => {
     const wrapper = await mountSuite(true)
     await start(wrapper)
+    await wrapper.get('.suite-nav-part:nth-child(2) .part-label').trigger('click')
     // Dispatch without yielding a render tick, as with rapid pointer/keyboard navigation.
     ;(wrapper.get('[data-display-number="26"]').element as HTMLButtonElement).click()
     ;(wrapper.get('[aria-label="Next question"]').element as HTMLButtonElement).click()
@@ -91,6 +110,27 @@ describe('full suite with three real reading sessions', () => {
     expect(wrapper.findAll('.suite-passage')[2].attributes('aria-hidden')).toBeUndefined()
     expect(wrapper.findAll('.suite-passage')[1].attributes('aria-hidden')).toBe('true')
     expect(handles(wrapper)[2].getState().activeQuestionId).toBe('q1')
+  })
+
+  it('shares the resized pane and text size across parts while keeping the active part expanded', async () => {
+    const wrapper = await mountSuite()
+    await start(wrapper)
+    expect(wrapper.findAll('.suite-nav-part.active .suite-question')).toHaveLength(13)
+    expect(wrapper.findAll('.suite-nav-part:not(.active) .suite-question')).toHaveLength(0)
+
+    await wrapper.get('.suite-passage:not([aria-hidden]) [role="separator"]').trigger('keydown', { key: 'ArrowRight' })
+    expect(wrapper.get('.suite-passage:not([aria-hidden]) [role="separator"]').attributes('aria-valuenow')).toBe('55')
+
+    await wrapper.get('.exam-actions .topbar-button:not(.topbar-submit)').trigger('click')
+    await wrapper.get('.font-options input[value="large"]').setValue()
+    await wrapper.get('.font-continue').trigger('click')
+    expect(wrapper.get('.suite-passage:not([aria-hidden]) .native-practice-shell').classes()).toContain('font-large')
+
+    await wrapper.get('.suite-nav-part:nth-child(2) .part-label').trigger('click')
+    expect(wrapper.findAll('.suite-nav-part.active .suite-question')).toHaveLength(13)
+    expect(wrapper.findAll('.suite-nav-part:not(.active) .suite-question')).toHaveLength(0)
+    expect(wrapper.get('.suite-passage:not([aria-hidden]) [role="separator"]').attributes('aria-valuenow')).toBe('55')
+    expect(wrapper.get('.suite-passage:not([aria-hidden]) .native-practice-shell').classes()).toContain('font-large')
   })
 
   it('restores an expired running timer and submits all three parts exactly once', async () => {
