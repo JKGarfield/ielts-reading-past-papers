@@ -181,3 +181,5 @@
 }
 .exam-mode .question-content :deep(label:has(.native-text-input)) { display:inline; }
 .exam-mode :deep(.native-text-input) { display:inline-block; flex:none; }
+.exam-mode .nav-grid { padding:16px 2px 0; }
+.exam-mode .nav-jump { font-size:16px; font-weight:400; }
