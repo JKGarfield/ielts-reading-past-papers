@@ -1,6 +1,12 @@
 <template>
   <div id="app">
-    <router-view />
+    <!-- Keep a familiar backdrop without mounting any practice or exam route. -->
+    <div class="retired-site-background" inert aria-hidden="true">
+      <MainLayout>
+        <Home />
+      </MainLayout>
+    </div>
+    <SiteMigrationGate />
   </div>
 </template>
 
@@ -11,6 +17,9 @@ import { eventBus, ACHIEVEMENT_UNLOCKED } from '@/utils/eventBus'
 import { notification } from 'ant-design-vue'
 import type { Achievement } from '@/store/achievementStore'
 import { useThemeStore } from '@/store/themeStore'
+import MainLayout from '@/layouts/MainLayout.vue'
+import Home from '@/views/Home.vue'
+import SiteMigrationGate from '@/components/SiteMigrationGate.vue'
 
 // 提供全局 i18n
 const { t, currentLang } = provideI18n()
@@ -72,5 +81,9 @@ onUnmounted(() => {
 #app {
   color: var(--text-primary);
   min-height: 100vh;
+}
+.retired-site-background {
+  pointer-events: none;
+  user-select: none;
 }
 </style>

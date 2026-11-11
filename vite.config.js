@@ -32,7 +32,8 @@ export default defineConfig(({ mode }) => {
         strategies: 'generateSW',
         injectRegister: false,
         registerType: 'prompt',
-        selfDestroying: isVercelBuild,
+        // Retirement must take over old offline clients without a dismissible update prompt.
+        selfDestroying: staticMode || isVercelBuild,
         manifest: false,
         includeAssets: [
           'favicon.svg',

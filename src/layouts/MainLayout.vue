@@ -137,7 +137,7 @@
         </transition>
 
         <transition name="page-fade" mode="out-in">
-          <router-view :key="$route.path" />
+          <slot><router-view :key="$route.path" /></slot>
         </transition>
       </div>
     </main>
